@@ -1,0 +1,10 @@
+[Unit]
+Description=Lintian
+Wants=lintian.timer
+After=network.target nginx.service
+
+[Service]
+Type=simple
+User=lugito
+Group=lugito
+ExecStart=/srv/lubuntu-ci/repos/ci-tools/lintian-ppa -u lubuntu-ci -p unstable-ci-proposed
