@@ -37,6 +37,8 @@ os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(BASE_LINTIAN_DIR, exist_ok=True)
 
+current_time = datetime.utcnow().strftime("%H-%M-%S")
+log_file = os.path.join(LOG_DIR, f"{current_time}.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
