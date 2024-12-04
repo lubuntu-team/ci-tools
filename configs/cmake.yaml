@@ -1,0 +1,10 @@
+packages:
+  - name: cmake
+    upstream_url: "https://gitlab.kitware.com/cmake/cmake.git"
+    packaging_url: "https://git.lubuntu.me/Lubuntu/cmake.git"
+    packaging_branch: "ci/unstable"
+
+releases:
+  - plucky
+  - oracular
+  - noble

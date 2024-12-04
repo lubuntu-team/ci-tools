@@ -1,0 +1,110 @@
+packages:
+  - name: qt6-base
+    upstream_url: "https://code.qt.io/qt/qtbase.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-base"
+    packaging_branch: "ci/unstable"
+  - name: qt6-imageformats
+    upstream_url: "https://code.qt.io/qt/qtimageformats.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-imageformats"
+    packaging_branch: "ci/unstable"
+  - name: qt6-languageserver
+    upstream_url: "https://code.qt.io/qt/qtlanguageserver.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-languageserver"
+    packaging_branch: "ci/unstable"
+  - name: qt6-shadertools
+    upstream_url: "https://code.qt.io/qt/qtshadertools.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-shadertools"
+    packaging_branch: "ci/unstable"
+  - name: qt6-svg
+    upstream_url: "https://code.qt.io/qt/qtsvg.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-svg"
+    packaging_branch: "ci/unstable"
+  - name: qt6-networkauth
+    upstream_url: "https://code.qt.io/qt/qtnetworkauth.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-networkauth"
+    packaging_branch: "ci/unstable"
+  - name: qt6-serialport
+    upstream_url: "https://code.qt.io/qt/qtserialport.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-serialport"
+    packaging_branch: "ci/unstable"
+  - name: qt6-declarative
+    upstream_url: "https://code.qt.io/qt/qtdeclarative.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-declarative"
+    packaging_branch: "ci/unstable"
+  - name: qt6-lottie
+    upstream_url: "https://code.qt.io/qt/qtlottie.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-lottie"
+    packaging_branch: "ci/unstable"
+  - name: qt6-websockets
+    upstream_url: "https://code.qt.io/qt/qtwebsockets.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-websockets"
+    packaging_branch: "ci/unstable"
+  - name: qt6-5compat
+    upstream_url: "https://code.qt.io/qt/qt5compat.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-5compat"
+    packaging_branch: "ci/unstable"
+  - name: qt6-connectivity
+    upstream_url: "https://code.qt.io/qt/qtconnectivity.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-connectivity"
+    packaging_branch: "ci/unstable"
+  - name: qt6-scxml
+    upstream_url: "https://code.qt.io/qt/qtscxml.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-scxml"
+    packaging_branch: "ci/unstable"
+  - name: qt6-sensors
+    upstream_url: "https://code.qt.io/qt/qtsensors.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-sensors"
+    packaging_branch: "ci/unstable"
+  - name: qt6-wayland
+    upstream_url: "https://code.qt.io/qt/qtwayland.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-wayland"
+    packaging_branch: "ci/unstable"
+  - name: qt6-datavis3d
+    upstream_url: "https://code.qt.io/qt/qtdatavis3d.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-datavis3d"
+    packaging_branch: "ci/unstable"
+  - name: qt6-grpc
+    upstream_url: "https://code.qt.io/qt/qtgrpc.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-grpc"
+    packaging_branch: "ci/unstable"
+  - name: qt6-positioning
+    upstream_url: "https://code.qt.io/qt/qtpositioning.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-positioning"
+    packaging_branch: "ci/unstable"
+  - name: qt6-quicktimeline
+    upstream_url: "https://code.qt.io/qt/qtquicktimeline.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-quicktimeline"
+    packaging_branch: "ci/unstable"
+  - name: qt6-serialbus
+    upstream_url: "https://code.qt.io/qt/qtserialbus.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-serialbus"
+    packaging_branch: "ci/unstable"
+  - name: qt6-tools
+    upstream_url: "https://code.qt.io/qt/qttools.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-tools"
+    packaging_branch: "ci/unstable"
+  - name: qt6-webchannel
+    upstream_url: "https://code.qt.io/qt/qtwebchannel.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-webchannel"
+    packaging_branch: "ci/unstable"
+  - name: qt6-httpserver
+    upstream_url: "https://code.qt.io/qt/qthttpserver.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-httpserver"
+    packaging_branch: "ci/unstable"
+  - name: qt6-remoteobjects
+    upstream_url: "https://code.qt.io/qt/qtremoteobjects.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-remoteobjects"
+    packaging_branch: "ci/unstable"
+  - name: qt6-location
+    upstream_url: "https://code.qt.io/qt/qtlocation.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-location"
+    packaging_branch: "ci/unstable"
+  - name: qt6-translations
+    upstream_url: "https://code.qt.io/qt/qttranslations.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/+git/qt6-translations"
+    packaging_branch: "ci/unstable"
+
+releases:
+  - plucky
+  - oracular
+  - noble

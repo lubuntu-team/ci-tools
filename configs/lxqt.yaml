@@ -1,0 +1,45 @@
+packages:
+  - name: lxqt-build-tools
+  - name: libdbusmenu-lxqt
+    packaging_branch: "ci/unstable"
+  - name: libqtxdg
+  - name: lxqt-menu-data
+  - name: liblxqt
+  - name: libsysstat
+  - name: qtxdg-tools
+  - name: libfm-qt
+  - name: lxqt-globalkeys
+  - name: lxqt-qtplugin
+  - name: qtermwidget
+  - name: lxqt-panel
+  - name: pcmanfm-qt
+  - name: qterminal
+  - name: lxqt-powermanagement
+  - name: lxqt-runner
+  - name: lxqt-themes
+  - name: lxqt-admin
+  - name: lxqt-notificationd
+  - name: lxqt-about
+  - name: lxqt-config
+  - name: lxqt-policykit
+  - name: lxqt-sudo
+  - name: lxqt-openssh-askpass
+  - name: lxqt-session
+  - name: pavucontrol-qt
+  - name: xdg-desktop-portal-lxqt
+  - name: lxqt-archiver
+  - name: screengrab
+  - name: lximage-qt
+  - name: qps
+  - name: obconf-qt
+  - name: nm-tray
+    upstream_url: "https://github.com/palinek/nm-tray.git"
+  - name: calamares
+    upstream_url: "https://github.com/calamares/calamares.git"
+    packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/ubuntu/+source/calamares/+git/calamares"
+    packaging_branch: "ci/unstable"
+
+releases:
+  - plucky
+  - oracular
+  - noble

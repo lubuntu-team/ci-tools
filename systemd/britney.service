@@ -1,0 +1,11 @@
+[Unit]
+Description=Britney
+Wants=britney.timer
+After=network.target
+
+[Service]
+Type=simple
+User=lugito
+Group=lugito
+WorkingDirectory=/srv/lubuntu-ci/repos/ci-tools
+ExecStart=/usr/bin/python3 /srv/lubuntu-ci/repos/ci-tools/run-britney

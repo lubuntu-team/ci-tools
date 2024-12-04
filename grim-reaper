@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
+from launchpadlib.launchpad import Launchpad
+
+now = datetime.now()
+
+def print_log(string):
+    global now
+    old_now = now
+    now = datetime.now()
+    time_elapsed = now - old_now
+    print(f"[{now}] (took {time_elapsed}) {string}")
+
+print(f"[{now}] Logging into Launchpad...")
+launchpad = Launchpad.login_with("grim-reaper", "production", version="devel")
+
+print_log("Logged in. Initializing repositories...")
+ubuntu = launchpad.distributions["ubuntu"]
+lubuntu_ci = launchpad.people["lubuntu-ci"]
+regular = lubuntu_ci.getPPAByName(distribution=ubuntu, name="unstable-ci")
+proposed = lubuntu_ci.getPPAByName(distribution=ubuntu, name="unstable-ci-proposed")
+
+print_log("IS THAT THE GRIM REAPER?!?!?!?!!!")
+
+# Fetch packages once
+two_weeks_ago = datetime.now() - timedelta(days=14)
+packages = [proposed.getPublishedSources(status="Superseded"), regular.getPublishedSources(status="Superseded")]
+total_removals = sum(len(packageset) for packageset in packages)
+
+print_log(f"Total packages to remove: {total_removals}")
+current_package = 1
+current_percentage = 0
+for packageset in packages:
+    for pkg in packageset:
+        # Cancel all running builds for the package:
+        for build in pkg.getBuilds():
+            if build.buildstate in ["Currently building", "Needs building"]:
+                # Only cancel the build if we can
+                if build.can_be_cancelled:
+                    build.cancel()
+        # Delete the source package
+        pkg.requestDeletion(removal_comment="superseded")
+        new_percentage = int(current_package / total_removals)
+        if new_percentage > current_percentage:
+            current_percentage = new_percentage
+            print_log(f"{new_percentage}% complete ({current_package}/{total_removals})")
+        current_package += 1

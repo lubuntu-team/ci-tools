@@ -1,0 +1,306 @@
+packages:
+  - name: kf6-extra-cmake-modules
+    upstream_url: "https://invent.kde.org/frameworks/extra-cmake-modules.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-extra-cmake-modules"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-attica
+    upstream_url: "https://invent.kde.org/frameworks/attica.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-attica"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-baloo
+    upstream_url: "https://invent.kde.org/frameworks/baloo.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-baloo"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-bluez-qt
+    upstream_url: "https://invent.kde.org/frameworks/bluez-qt.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-bluez-qt"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-breeze-icons
+    upstream_url: "https://invent.kde.org/frameworks/breeze-icons.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-breeze-icons"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-frameworkintegration
+    upstream_url: "https://invent.kde.org/frameworks/frameworkintegration.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-frameworkintegration"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kapidox
+    upstream_url: "https://invent.kde.org/frameworks/kapidox.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kapidox"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-karchive
+    upstream_url: "https://invent.kde.org/frameworks/karchive.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-karchive"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kauth
+    upstream_url: "https://invent.kde.org/frameworks/kauth.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kauth"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kbookmarks
+    upstream_url: "https://invent.kde.org/frameworks/kbookmarks.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kbookmarks"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcalendarcore
+    upstream_url: "https://invent.kde.org/frameworks/kcalendarcore.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcalendarcore"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcmutils
+    upstream_url: "https://invent.kde.org/frameworks/kcmutils.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcmutils"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcodecs
+    upstream_url: "https://invent.kde.org/frameworks/kcodecs.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcodecs"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcolorscheme
+    upstream_url: "https://invent.kde.org/frameworks/kcolorscheme.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcolorscheme"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcompletion
+    upstream_url: "https://invent.kde.org/frameworks/kcompletion.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcompletion"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kconfig
+    upstream_url: "https://invent.kde.org/frameworks/kconfig.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kconfig"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kconfigwidgets
+    upstream_url: "https://invent.kde.org/frameworks/kconfigwidgets.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kconfigwidgets"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcoreaddons
+    upstream_url: "https://invent.kde.org/frameworks/kcoreaddons.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcoreaddons"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kcrash
+    upstream_url: "https://invent.kde.org/frameworks/kcrash.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kcrash"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kdbusaddons
+    upstream_url: "https://invent.kde.org/frameworks/kdbusaddons.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kdbusaddons"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kdeclarative
+    upstream_url: "https://invent.kde.org/frameworks/kdeclarative.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kdeclarative"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kded
+    upstream_url: "https://invent.kde.org/frameworks/kded.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kded"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kdesu
+    upstream_url: "https://invent.kde.org/frameworks/kdesu.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kdesu"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kdnssd
+    upstream_url: "https://invent.kde.org/frameworks/kdnssd.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kdnssd"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kdoctools
+    upstream_url: "https://invent.kde.org/frameworks/kdoctools.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kdoctools"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kfilemetadata
+    upstream_url: "https://invent.kde.org/frameworks/kfilemetadata.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kfilemetadata"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kglobalaccel
+    upstream_url: "https://invent.kde.org/frameworks/kglobalaccel.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kglobalaccel"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kguiaddons
+    upstream_url: "https://invent.kde.org/frameworks/kguiaddons.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kguiaddons"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kholidays
+    upstream_url: "https://invent.kde.org/frameworks/kholidays.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kholidays"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-ki18n
+    upstream_url: "https://invent.kde.org/frameworks/ki18n.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-ki18n"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kiconthemes
+    upstream_url: "https://invent.kde.org/frameworks/kiconthemes.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kiconthemes"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kidletime
+    upstream_url: "https://invent.kde.org/frameworks/kidletime.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kidletime"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kimageformats
+    upstream_url: "https://invent.kde.org/frameworks/kimageformats.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kimageformats"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kio
+    upstream_url: "https://invent.kde.org/frameworks/kio.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kio"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kirigami
+    upstream_url: "https://invent.kde.org/frameworks/kirigami.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kirigami"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kitemmodels
+    upstream_url: "https://invent.kde.org/frameworks/kitemmodels.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kitemmodels"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kitemviews
+    upstream_url: "https://invent.kde.org/frameworks/kitemviews.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kitemviews"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kjobwidgets
+    upstream_url: "https://invent.kde.org/frameworks/kjobwidgets.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kjobwidgets"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-knewstuff
+    upstream_url: "https://invent.kde.org/frameworks/knewstuff.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-knewstuff"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-knotifications
+    upstream_url: "https://invent.kde.org/frameworks/knotifications.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-knotifications"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-knotifyconfig
+    upstream_url: "https://invent.kde.org/frameworks/knotifyconfig.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-knotifyconfig"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kpackage
+    upstream_url: "https://invent.kde.org/frameworks/kpackage.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kpackage"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kparts
+    upstream_url: "https://invent.kde.org/frameworks/kparts.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kparts"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kpeople
+    upstream_url: "https://invent.kde.org/frameworks/kpeople.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kpeople"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kplotting
+    upstream_url: "https://invent.kde.org/frameworks/kplotting.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kplotting"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kpty
+    upstream_url: "https://invent.kde.org/frameworks/kpty.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kpty"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kquickcharts
+    upstream_url: "https://invent.kde.org/frameworks/kquickcharts.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kquickcharts"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-krunner
+    upstream_url: "https://invent.kde.org/frameworks/krunner.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-krunner"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kservice
+    upstream_url: "https://invent.kde.org/frameworks/kservice.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kservice"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kstatusnotifieritem
+    upstream_url: "https://invent.kde.org/frameworks/kstatusnotifieritem.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kstatusnotifieritem"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-ksvg
+    upstream_url: "https://invent.kde.org/frameworks/ksvg.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-ksvg"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-ktexteditor
+    upstream_url: "https://invent.kde.org/frameworks/ktexteditor.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-ktexteditor"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-ktexttemplate
+    upstream_url: "https://invent.kde.org/frameworks/ktexttemplate.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-ktexttemplate"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-ktextwidgets
+    upstream_url: "https://invent.kde.org/frameworks/ktextwidgets.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-ktextwidgets"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kunitconversion
+    upstream_url: "https://invent.kde.org/frameworks/kunitconversion.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kunitconversion"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kuserfeedback
+    upstream_url: "https://invent.kde.org/frameworks/kuserfeedback.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kuserfeedback"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kwallet
+    upstream_url: "https://invent.kde.org/frameworks/kwallet.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kwallet"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kwidgetsaddons
+    upstream_url: "https://invent.kde.org/frameworks/kwidgetsaddons.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kwidgetsaddons"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kwindowsystem
+    upstream_url: "https://invent.kde.org/frameworks/kwindowsystem.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kwindowsystem"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-kxmlgui
+    upstream_url: "https://invent.kde.org/frameworks/kxmlgui.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-kxmlgui"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-modemmanager-qt
+    upstream_url: "https://invent.kde.org/frameworks/modemmanager-qt.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-modemmanager-qt"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-networkmanager-qt
+    upstream_url: "https://invent.kde.org/frameworks/networkmanager-qt.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-networkmanager-qt"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-prison
+    upstream_url: "https://invent.kde.org/frameworks/prison.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-prison"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-purpose
+    upstream_url: "https://invent.kde.org/frameworks/purpose.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-purpose"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-qqc2-desktop-style
+    upstream_url: "https://invent.kde.org/frameworks/qqc2-desktop-style.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-qqc2-desktop-style"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-solid
+    upstream_url: "https://invent.kde.org/frameworks/solid.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-solid"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-sonnet
+    upstream_url: "https://invent.kde.org/frameworks/sonnet.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-sonnet"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-syndication
+    upstream_url: "https://invent.kde.org/frameworks/syndication.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-syndication"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-syntax-highlighting
+    upstream_url: "https://invent.kde.org/frameworks/syntax-highlighting.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-syntax-highlighting"
+    packaging_branch: "kubuntu_unstable"
+  - name: kf6-threadweaver
+    upstream_url: "https://invent.kde.org/frameworks/threadweaver.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kf6-threadweaver"
+    packaging_branch: "kubuntu_unstable"
+  - name: kpmcore
+    upstream_url: "https://invent.kde.org/system/kpmcore.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/kpmcore"
+    packaging_branch: "kubuntu_unstable"
+  - name: plasma-discover
+    upstream_url: "https://invent.kde.org/plasma/discover.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/discover"
+    packaging_branch: "kubuntu_unstable"
+  - name: skanlite
+    upstream_url: "https://invent.kde.org/graphics/skanlite.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/skanlite"
+    packaging_branch: "kubuntu_unstable"
+  - name: libksane
+    upstream_url: "https://invent.kde.org/graphics/libksane.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/libksane"
+    packaging_branch: "kubuntu_unstable"
+  - name: ksanecore
+    upstream_url: "https://invent.kde.org/libraries/ksanecore.git"
+    packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/ksanecore"
+    packaging_branch: "kubuntu_unstable"
+
+releases:
+  - plucky
+  - oracular
+  - noble

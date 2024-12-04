@@ -1,0 +1,161 @@
+#!/bin/bash
+# download current package indexes to data/<series>{,-proposed}/ for running
+# britney against a PPA. The PPA will play the role of "-proposed" (i. e.
+# "unstable" in britney terms, containing the updated packages to test), the
+# Ubuntu archive has the "-release" part (i. e. "testing" in britney terms, in
+# which the -proposed packages are being landed).
+#
+# Copyright (C) 2019-2024 Simon Quigley <tsimonq2@ubuntu.com>
+# Copyright (C) Canonical Ltd
+# Author: Martin Pitt <martin.pitt@ubuntu.com>
+# Author: Robert Bruce Park <robert.park@canonical.com>
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+set -u
+
+./pending-packages $RELEASE || exit 0
+
+export MAIN_ARCHIVE="http://us.archive.ubuntu.com/ubuntu/dists/"
+export PORTS_ARCHIVE="http://us.ports.ubuntu.com/ubuntu-ports/dists/"
+export LP_TEAM="lubuntu-ci"
+export SOURCE_PPA="unstable-ci-proposed"
+export DEST_PPA="unstable-ci"
+export SOURCE_PPA_URL="https://ppa.launchpadcontent.net/$LP_TEAM/$SOURCE_PPA/ubuntu/dists/$RELEASE/main";
+export DEST_PPA_URL="https://ppa.launchpadcontent.net/$LP_TEAM/$DEST_PPA/ubuntu/dists/$RELEASE/main";
+export ARCHES="amd64"
+export PORTS_ARCHES="arm64 armhf ppc64el riscv64 s390x"
+export BRITNEY_CACHE="cache/"
+export BRITNEY_DATADIR="data/"
+export BRITNEY_OUTDIR="output/"
+export BRITNEY_HINTDIR="../hints-ubuntu/"
+export BRITNEY_LOC="/srv/lubuntu-ci/repos/britney2-ubuntu/britney.py"
+export BRITNEY_TIMESTAMP=$(date +"%Y-%m-%d_%H:%M:%S")
+
+echo "Release: $RELEASE";
+echo "Timestamp: $BRITNEY_TIMESTAMP"
+
+# Download files in parallel in background, only if there is an update
+refresh() {
+    DIR=$BRITNEY_CACHE/$pocket/$(echo $1 | rev | cut --delimiter=/ --fields=2,3 | rev)
+    mkdir --parents $DIR
+    touch --no-create $BRITNEY_CACHE $BRITNEY_CACHE/$pocket "$(dirname $DIR)" $DIR  # Timestamp thwarts expire.sh
+    wget --directory-prefix $DIR --timestamping $1 --append-output $DIR/$$-wget-log --no-verbose &
+}
+
+echo 'Refreshing package indexes...'
+
+for pocket in $RELEASE $RELEASE-updates; do
+    for component in main restricted universe multiverse; do
+        for arch in $ARCHES; do
+            refresh $MAIN_ARCHIVE/$pocket/$component/binary-$arch/Packages.gz
+        done
+        for arch in $PORTS_ARCHES; do
+            refresh $PORTS_ARCHIVE/$pocket/$component/binary-$arch/Packages.gz
+        done
+        refresh $MAIN_ARCHIVE/$pocket/$component/source/Sources.gz
+    done
+done
+
+# Treat the destination PPA as just another pocket
+for pocket in $RELEASE-ppa-proposed; do
+    for arch in $ARCHES $PORTS_ARCHES; do
+        refresh $DEST_PPA_URL/source/Sources.gz
+        refresh $DEST_PPA_URL/binary-$arch/Packages.gz
+    done
+done
+
+# Get the source PPA
+pocket=$SOURCE_PPA-$RELEASE
+for arch in $ARCHES $PORTS_ARCHES; do
+    refresh $SOURCE_PPA_URL/binary-$arch/Packages.gz
+done
+refresh $SOURCE_PPA_URL/source/Sources.gz
+
+wait  # for wgets to finish
+
+find $BRITNEY_DATADIR -name "$$-wget-log*" -exec cat '{}' \; -delete 1>&2
+
+echo 'Building britney indexes...'
+
+mkdir --parents "$BRITNEY_OUTDIR/$BRITNEY_TIMESTAMP/"
+
+# "Unstable" is SOURCE_PPA
+DEST=$BRITNEY_DATADIR/$RELEASE-proposed
+mkdir --parents $DEST
+mkdir -pv $BRITNEY_DATADIR/$RELEASE-proposed/state/
+touch $BRITNEY_DATADIR/$RELEASE-proposed/state/age-policy-dates
+touch --no-create $DEST
+ln --verbose --symbolic --force --no-dereference $BRITNEY_HINTDIR $DEST/Hints
+zcat $BRITNEY_CACHE/$SOURCE_PPA-$RELEASE/*/source/Sources.gz > $DEST/Sources
+for arch in $ARCHES $PORTS_ARCHES; do
+    zcat $BRITNEY_CACHE/$SOURCE_PPA-$RELEASE/*/binary-$arch/Packages.gz > $DEST/Packages_${arch}
+done
+touch $DEST/Blocks $DEST/Dates
+
+# "Testing" is a combination of the archive and DEST_PPA
+DEST=$BRITNEY_DATADIR/$RELEASE
+mkdir --parents $DEST
+mkdir -pv $BRITNEY_DATADIR/$RELEASE/state/
+touch $BRITNEY_DATADIR/$RELEASE/state/age-policy-dates
+touch --no-create $DEST
+ln --verbose --symbolic --force --no-dereference $BRITNEY_HINTDIR $DEST/Hints
+zcat $BRITNEY_CACHE/$RELEASE*/*/source/Sources.gz > $DEST/Sources
+sed -i "s/Section: universe\//Section: /g" $DEST/Sources
+for arch in $ARCHES $PORTS_ARCHES; do
+    zcat $BRITNEY_CACHE/$RELEASE*/*/binary-$arch/Packages.gz > $DEST/Packages_${arch}
+    sed -i "s/Section: universe\//Section: /g" $DEST/Packages_${arch}
+done
+touch $DEST/Blocks
+touch "$BRITNEY_DATADIR/$SOURCE_PPA-$RELEASE/Dates"
+
+# Create config file atomically.
+CONFIG="britney.conf"
+cp $CONFIG $CONFIG.bak
+envsubst < "$CONFIG.bak" > "$CONFIG"
+rm $CONFIG.bak
+
+echo 'Running britney...'
+$BRITNEY_LOC -v --config "$CONFIG" --series $RELEASE
+
+echo 'Syncing output to frontend...'
+rmdir output/;
+rsync -da output/ ../../output/britney
+
+echo "$0 done."
+
+echo "Moving packages..."
+
+egrep -v '^#' output/$RELEASE/HeidiResultDelta > candidates || echo "No candidates found.";
+
+while read -r -a package; do
+    # This only acts on sources; binaries require manual cleanup
+    if [ ${#package[@]} = 2 ]; then
+        COPY="../ubuntu-archive-tools/copy-package"
+        REMOVE="../ubuntu-archive-tools/remove-package"
+        if echo ${package[0]} | egrep -q "^-"; then
+            PACKAGE=$(echo ${package[0]} | sed 's/-//')
+            echo "Demoting $PACKAGE..."
+            $COPY -y -b -s $RELEASE --from "ppa:$LP_TEAM/ubuntu/$DEST_PPA" --to "ppa:$LP_TEAM/ubuntu/$SOURCE_PPA" --version "${package[1]}" "$PACKAGE";
+            $REMOVE -y -s $RELEASE --archive "ppa:$LP_TEAM/ubuntu/$DEST_PPA" --version "${package[1]}" --removal-comment="demoted to proposed" "$PACKAGE";
+        else
+            echo "Migrating ${package[0]}..."
+            $COPY -y -b -s $RELEASE --from "ppa:$LP_TEAM/ubuntu/$SOURCE_PPA" --to "ppa:$LP_TEAM/ubuntu/$DEST_PPA" --version "${package[1]}" "${package[0]}";
+            $REMOVE -y -s $RELEASE --archive "ppa:$LP_TEAM/ubuntu/$SOURCE_PPA" --version "${package[1]}" --removal-comment="moved to release" "${package[0]}";
+        fi
+    fi
+done < candidates;
+rm candidates;
+
+echo "Run the grim reaper..."
+./grim-reaper
