@@ -15,9 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Configuration
 LOG_DIR="/srv/lubuntu-ci/output/logs/britney"
-SCRIPT_PATH="fetch-indexes"
+SCRIPT_PATH="/srv/lubuntu-ci/repos/ci-tools/fetch-indexes"
 MAX_LOG_AGE=86400 # 24 hours in seconds
 
 # Ensure the log directory exists
