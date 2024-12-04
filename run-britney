@@ -21,10 +21,10 @@ SCRIPT_PATH="fetch-indexes"
 MAX_LOG_AGE=86400 # 24 hours in seconds
 
 # Ensure the log directory exists
-mkdir -p "$LOG_DIR"
+mkdir -p $LOG_DIR
 
 # Log rotation: Remove logs older than MAX_LOG_AGE
-find "$LOG_DIR" -type f -mtime +1 -exec rm -f {} \;
+find $LOG_DIR -type f -mtime +1 -exec rm -f {} \;
 
 # Execute the fetch-indexes script for each release and log output
 for release in plucky oracular noble; do
