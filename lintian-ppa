@@ -125,7 +125,7 @@ def process_sources(url):
 
     shutil.rmtree(tmpdir)
 
-with ThreadPoolExecutor(max_workers=30) as executor:
+with ThreadPoolExecutor(max_workers=5) as executor:
     futures = set()
 
     def main_source_iter():
