@@ -59,9 +59,6 @@ ppa = user.getPPAByName(distribution=ubuntu, name=args.ppa)
 if args.ppa2:
     ppa2 = user.getPPAByName(distribution=ubuntu, name=args.ppa)
 
-if not os.path.exists(args.user):
-    os.mkdir(args.user)
-
 lintian = os.path.join(BASE_OUTPUT_DIR, "lintian")
 lintian_tmp = os.path.join(BASE_OUTPUT_DIR, f".lintian.tmp.{str(uuid.uuid4())[:8]}")
 if not os.path.exists(lintian):
@@ -132,7 +129,7 @@ with ThreadPoolExecutor(max_workers=30) as executor:
     futures = set()
 
     def main_source_iter():
-        last_run_file = os.path.join(args.user, ".LAST_RUN")
+        last_run_file = os.path.join(lintian, ".LAST_RUN")
         last_run_datetime = datetime.now(timezone.utc) - timedelta(days=365)
         if os.path.exists(last_run_file):
             with open(last_run_file, "r") as file:
