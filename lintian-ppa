@@ -30,13 +30,18 @@ from launchpadlib.launchpad import Launchpad
 from pathlib import Path
 
 BASE_OUTPUT_DIR = "/srv/lubuntu-ci/output/"
-LOG_DIR = os.path.join(BASE_OUTPUT_DIR, "logs/lintian/")
 
 parser = argparse.ArgumentParser(description="")
 parser.add_argument("--user", "-u", required=True)
 parser.add_argument("--ppa", "-p", required=True)
 parser.add_argument("--ppa2", "-p2")
+parser.add_argument("--override-output", "-o")
 args = parser.parse_args()
+
+if args.override_output:
+    BASE_OUTPUT_DIR = args.override_output
+
+LOG_DIR = os.path.join(BASE_OUTPUT_DIR, "logs/lintian/")
 
 os.makedirs(LOG_DIR, exist_ok=True)
 current_time = datetime.utcnow().strftime("%H-%M-%S")
