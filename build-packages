@@ -30,7 +30,7 @@ SUPPRESSED_LINTIAN_TAGS = [
 ]
 BASE_OUTPUT_DIR = "/srv/lubuntu-ci/output"
 LOG_DIR = os.path.join(BASE_OUTPUT_DIR, "logs", "source_builds")
-BASE_LINTIAN_DIR = os.path.join(BASE_OUTPUT_DIR, f"lintian.tmp.{str(uuid.uuid4())[:8]}")
+BASE_LINTIAN_DIR = os.path.join(BASE_OUTPUT_DIR, f".lintian.tmp.{str(uuid.uuid4())[:8]}")
 REAL_LINTIAN_DIR = os.path.join(BASE_OUTPUT_DIR, "lintian")
 
 os.makedirs(LOG_DIR, exist_ok=True)

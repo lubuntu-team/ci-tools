@@ -89,7 +89,8 @@ def rsync(source, destination):
             shutil.copy2(src_path, dst_path)
 
 def process_sources(url):
-    tmpdir = os.
+    tmpdir = os.path.join(BASE_OUTPUT_DIR, f".lintian.tmp.{str(uuid.uuid4())[:8]}")
+    os.mkdir(tmpdir)
     changes_file = url.split("/")[-1]
     logging.info(f"Downloading {changes_file} and friends via dget")
     dget_command = ["dget", "-u", url]
@@ -124,6 +125,8 @@ def process_sources(url):
 
     with open(os.path.join(output_path, f"{arch}.txt"), "w") as f:
         f.write(lintian_output)
+
+    shutil.rmtree(tmpdir)
 
 with ThreadPoolExecutor(max_workers=30) as executor:
     futures = set()
