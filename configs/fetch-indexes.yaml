@@ -1,0 +1,28 @@
+MAIN_ARCHIVE: "http://us.archive.ubuntu.com/ubuntu/dists/"
+PORTS_ARCHIVE: "http://us.ports.ubuntu.com/ubuntu-ports/dists/"
+LP_TEAM: "lubuntu-ci"
+SOURCE_PPA: "unstable-ci-proposed"
+DEST_PPA: "unstable-ci"
+
+ARCHES:
+  - "amd64"
+PORTS_ARCHES:
+  - "arm64"
+  - "armhf"
+  - "ppc64el"
+  - "riscv64"
+  - "s390x"
+
+BRITNEY_CACHE: "cache/"
+BRITNEY_DATADIR: "data/"
+BRITNEY_OUTDIR: "output/"
+BRITNEY_HINTDIR: "../hints-ubuntu/"
+BRITNEY_LOC: "/srv/lubuntu-ci/repos/britney2-ubuntu/britney.py"
+
+LOG_DIR: "/srv/lubuntu-ci/output/logs/britney"
+MAX_LOG_AGE_DAYS: 1
+
+RELEASES:
+  - "plucky"
+  - "oracular"
+  - "noble"

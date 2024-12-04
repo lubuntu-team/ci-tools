@@ -1,0 +1,11 @@
+[Unit]
+Description=Pull and compile tooling
+Wants=pull-tooling.timer
+After=network.target
+
+[Service]
+Type=simple
+User=lugito
+Group=lugito
+WorkingDirectory=/srv/lubuntu-ci/repos/ci-tools/
+ExecStart=/srv/lubuntu-ci/repos/ci-tools/pull-and-compile-tooling
