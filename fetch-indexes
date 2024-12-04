@@ -158,4 +158,4 @@ done < candidates;
 rm candidates;
 
 echo "Run the grim reaper..."
-./grim-reaper
+./grim-reaper $RELEASE
