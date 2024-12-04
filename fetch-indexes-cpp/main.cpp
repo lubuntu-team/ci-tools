@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <yaml-cpp/yaml.h>
+#include <sstream>
 
 #include "utilities.h"
 
@@ -39,6 +40,30 @@ namespace fs = std::filesystem;
 void printHelp(const char* programName);
 void processRelease(const std::string& release, const YAML::Node& config);
 void refresh(const std::string& url, const std::string& pocket, const std::string& britneyCache, std::mutex& logMutex);
+int executeAndLog(const std::string& command);
+
+// Execute a command and stream its output to std::cout in real time
+int executeAndLog(const std::string& command) {
+    std::string fullCommand = command + " 2>&1"; // Redirect stderr to stdout
+    FILE* pipe = popen(fullCommand.c_str(), "r");
+    if (!pipe) {
+        std::cout << "Failed to run command: " << command << std::endl;
+        return -1;
+    }
+
+    char buffer[256];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        std::cout << buffer;
+        std::cout.flush(); // Ensure real-time logging
+    }
+
+    int exitCode = pclose(pipe);
+    if (WIFEXITED(exitCode)) {
+        return WEXITSTATUS(exitCode);
+    } else {
+        return -1; // Abnormal termination
+    }
+}
 
 int main(int argc, char* argv[]) {
     std::string configFilePath = "config.yaml";
@@ -117,7 +142,7 @@ int main(int argc, char* argv[]) {
         // Log file named by current UTC time (YYYYMMDDTHH:MM:SS) and release
         std::time_t now_c = std::time(nullptr);
         char timestamp[20];
-        std::strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H:%M:%S", std::gmtime(&now_c));
+        std::strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H%M%S", std::gmtime(&now_c));
         std::string logFileName = LOG_DIR + "/" + timestamp + "_" + release + ".log";
 
         // Open log file
@@ -180,9 +205,9 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     std::cout << "Release: " << RELEASE << std::endl;
     std::cout << "Timestamp: " << BRITNEY_TIMESTAMP << std::endl;
 
-    // Execute pending-packages script
+    // Execute pending-packages script and capture its output
     std::string pendingCmd = "./pending-packages " + RELEASE;
-    int pendingResult = std::system(pendingCmd.c_str());
+    int pendingResult = executeAndLog(pendingCmd);
     if (pendingResult != 0) {
         std::cerr << "Error: pending-packages script failed for release " << RELEASE << std::endl;
         return;
@@ -258,8 +283,10 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
             if (filename.find(logPattern) != std::string::npos) {
                 // Output log content to stderr
                 std::ifstream logFile(p.path());
-                std::cerr << logFile.rdbuf();
-                logFile.close();
+                if (logFile.is_open()) {
+                    std::cerr << logFile.rdbuf();
+                    logFile.close();
+                }
                 fs::remove(p.path());
             }
         }
@@ -310,7 +337,7 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     }
 
     writeFile(fs::path(DEST) / "Blocks", "");
-    writeFile(fs::path(DEST) / "Dates", "");
+    writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
 
     // Similar steps for "Testing"
     DEST = BRITNEY_DATADIR + RELEASE;
@@ -372,7 +399,7 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
 
     // Run britney.py
     std::string britneyCmd = BRITNEY_LOC + " -v --config britney.conf --series " + RELEASE;
-    int britneyResult = std::system(britneyCmd.c_str());
+    int britneyResult = executeAndLog(britneyCmd);
     if (britneyResult != 0) {
         std::cerr << "Error: Britney execution failed for release " << RELEASE << std::endl;
         return;
@@ -418,16 +445,28 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
                                           " --to ppa:" + LP_TEAM + "/ubuntu/" + SOURCE_PPA + " --version " + packageInfo[1] + " " + PACKAGE;
                     std::string removeCmd = REMOVE + " -y -s " + RELEASE + " --archive ppa:" + LP_TEAM + "/ubuntu/" + DEST_PPA +
                                             " --version " + packageInfo[1] + " --removal-comment=\"demoted to proposed\" " + PACKAGE;
-                    std::system(copyCmd.c_str());
-                    std::system(removeCmd.c_str());
+                    int copyResult = executeAndLog(copyCmd);
+                    if (copyResult != 0) {
+                        std::cerr << "Error: Copy command failed for package " << PACKAGE << std::endl;
+                    }
+                    int removeResult = executeAndLog(removeCmd);
+                    if (removeResult != 0) {
+                        std::cerr << "Error: Remove command failed for package " << PACKAGE << std::endl;
+                    }
                 } else {
                     std::cout << "Migrating " << packageInfo[0] << "..." << std::endl;
                     std::string copyCmd = COPY + " -y -b -s " + RELEASE + " --from ppa:" + LP_TEAM + "/ubuntu/" + SOURCE_PPA +
                                           " --to ppa:" + LP_TEAM + "/ubuntu/" + DEST_PPA + " --version " + packageInfo[1] + " " + packageInfo[0];
                     std::string removeCmd = REMOVE + " -y -s " + RELEASE + " --archive ppa:" + LP_TEAM + "/ubuntu/" + SOURCE_PPA +
                                             " --version " + packageInfo[1] + " --removal-comment=\"moved to release\" " + packageInfo[0];
-                    std::system(copyCmd.c_str());
-                    std::system(removeCmd.c_str());
+                    int copyResult = executeAndLog(copyCmd);
+                    if (copyResult != 0) {
+                        std::cerr << "Error: Copy command failed for package " << packageInfo[0] << std::endl;
+                    }
+                    int removeResult = executeAndLog(removeCmd);
+                    if (removeResult != 0) {
+                        std::cerr << "Error: Remove command failed for package " << packageInfo[0] << std::endl;
+                    }
                 }
             }
         }
@@ -437,7 +476,7 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
 
     std::cout << "Run the grim reaper..." << std::endl;
     std::string grimCmd = "./grim-reaper " + RELEASE;
-    int grimResult = std::system(grimCmd.c_str());
+    int grimResult = executeAndLog(grimCmd);
     if (grimResult != 0) {
         std::cerr << "Error: Grim reaper execution failed for release " << RELEASE << std::endl;
         return;
