@@ -15,9 +15,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+# Configuration
 LOG_DIR="/srv/lubuntu-ci/output/logs/britney"
 SCRIPT_PATH="/srv/lubuntu-ci/repos/ci-tools/fetch-indexes"
-MAX_LOG_AGE=86400 # 24 hours in seconds
 
 # Ensure the log directory exists
 mkdir -p $LOG_DIR
@@ -30,7 +30,7 @@ for release in plucky oracular noble; do
     export RELEASE="$release"
 
     # Log file named by current UTC time (HH-MM-SS)
-    LOG_FILE="$LOG_DIR/$RELEASE_$(date -u +"%H-%M-%S").log"
+    LOG_FILE="$LOG_DIR/${release}_$(date -u +"%H-%M-%S").log"
 
     echo "$(date -u +"%Y-%m-%d %H:%M:%S") - Running Britney for $RELEASE" >> "$LOG_FILE"
     "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1
