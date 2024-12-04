@@ -30,7 +30,7 @@ for release in plucky oracular noble; do
     export RELEASE="$release"
 
     # Log file named by current UTC time (HH-MM-SS)
-    LOG_FILE="$LOG_DIR/${release}_$(date -u +"%H-%M-%S").log"
+    LOG_FILE="$LOG_DIR/$(date -u +"%Y%m%dT%H:%M:%S")_${release}.log"
 
     echo "$(date -u +"%Y-%m-%d %H:%M:%S") - Running Britney for $RELEASE" >> "$LOG_FILE"
     "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1
