@@ -16,13 +16,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 def clean_old_logs(log_dir, max_age_seconds=86400):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for file_name in os.listdir(log_dir):
         file_path = os.path.join(log_dir, file_name)
         if os.path.isfile(file_path):
-            file_age = now - os.path.getmtime(file_path)
-            if file_age > max_age_seconds:
+            file_age = now - datetime.fromtimestamp(os.path.getmtime(file_path), tz=timezone.utc)
+            if file_age > timedelta(seconds=max_age_seconds):
                 os.remove(file_path)
