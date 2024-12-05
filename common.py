@@ -16,7 +16,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 def clean_old_logs(log_dir, max_age_seconds=86400):
     now = datetime.now(timezone.utc)
