@@ -122,13 +122,13 @@ int main(int argc, char* argv[]) {
 
     // Log rotation: Remove logs older than MAX_LOG_AGE_DAYS
     int maxLogAgeDays = config["MAX_LOG_AGE_DAYS"].as<int>();
-    auto now = fs::file_time_type::clock::now(); // Use the same clock as file_time_type
+    auto now = fs::file_time_type::clock::now();
 
     for (const auto& entry : fs::directory_iterator(LOG_DIR)) {
         if (entry.is_regular_file()) {
             auto ftime = fs::last_write_time(entry.path());
             auto age = std::chrono::duration_cast<std::chrono::hours>(now - ftime).count() / 24;
-            if (age > maxLogAgeDays) {
+            if (age >= maxLogAgeDays) {
                 fs::remove(entry.path());
             }
         }
