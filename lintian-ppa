@@ -44,7 +44,7 @@ if args.override_output:
 LOG_DIR = os.path.join(BASE_OUTPUT_DIR, "logs/lintian/")
 
 os.makedirs(LOG_DIR, exist_ok=True)
-current_time = datetime.utcnow().strftime("%H-%M-%S")
+current_time = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
 log_file = os.path.join(LOG_DIR, f"{current_time}.log")
 logging.basicConfig(
     level=logging.INFO,

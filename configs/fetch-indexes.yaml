@@ -13,9 +13,11 @@ PORTS_ARCHES:
   - "riscv64"
   - "s390x"
 
+BRITNEY_CONF: "/srv/lubuntu-ci/repos/ci-tools/configs/britney.conf"
 BRITNEY_CACHE: "cache/"
 BRITNEY_DATADIR: "data/"
 BRITNEY_OUTDIR: "output/"
+BRITNEY_PUBLIC_OUTDIR: "/srv/lubuntu-ci/output/britney/"
 BRITNEY_HINTDIR: "../hints-ubuntu/"
 BRITNEY_LOC: "/srv/lubuntu-ci/repos/britney2-ubuntu/britney.py"
 

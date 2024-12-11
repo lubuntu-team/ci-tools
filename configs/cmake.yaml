@@ -1,7 +1,9 @@
 packages:
   - name: cmake
     upstream_url: "https://gitlab.kitware.com/cmake/cmake.git"
+    upstream_browser: "https://gitlab.kitware.com/cmake/cmake/-/commit/"
     packaging_url: "https://git.lubuntu.me/Lubuntu/cmake.git"
+    packaging_browser: "https://git.lubuntu.me/Lubuntu/cmake/commit/"
     packaging_branch: "ci/unstable"
 
 releases:

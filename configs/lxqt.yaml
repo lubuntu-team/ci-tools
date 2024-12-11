@@ -3,6 +3,7 @@ packages:
   - name: libdbusmenu-lxqt
     packaging_branch: "ci/unstable"
   - name: libqtxdg
+    packaging_branch: "ci/unstable"
   - name: lxqt-menu-data
   - name: liblxqt
   - name: libsysstat
@@ -13,6 +14,7 @@ packages:
   - name: qtermwidget
   - name: lxqt-panel
   - name: pcmanfm-qt
+    packaging_branch: "ci/unstable"
   - name: qterminal
   - name: lxqt-powermanagement
   - name: lxqt-runner
@@ -34,9 +36,12 @@ packages:
   - name: obconf-qt
   - name: nm-tray
     upstream_url: "https://github.com/palinek/nm-tray.git"
+    upstream_browser: "https://github.com/palinek/nm-tray/commit/"
   - name: calamares
     upstream_url: "https://github.com/calamares/calamares.git"
+    upstream_browser: "https://github.com/calamares/calamares/commit/"
     packaging_url: "https://git.launchpad.net/~ubuntu-qt-code/ubuntu/+source/calamares/+git/calamares"
+    packaging_browser: "https://git.launchpad.net/~ubuntu-qt-code/ubuntu/+source/calamares/+git/calamares/commit/?id="
     packaging_branch: "ci/unstable"
 
 releases:

@@ -184,9 +184,11 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     std::string LP_TEAM = config["LP_TEAM"].as<std::string>();
     std::string SOURCE_PPA = config["SOURCE_PPA"].as<std::string>();
     std::string DEST_PPA = config["DEST_PPA"].as<std::string>();
+    std::string BRITNEY_CONF = config["BRITNEY_CONF"].as<std::string>();
     std::string BRITNEY_CACHE = config["BRITNEY_CACHE"].as<std::string>();
     std::string BRITNEY_DATADIR = config["BRITNEY_DATADIR"].as<std::string>();
     std::string BRITNEY_OUTDIR = config["BRITNEY_OUTDIR"].as<std::string>();
+    std::string BRITNEY_PUBLIC_OUTDIR = config["BRITNEY_PUBLIC_OUTDIR"].as<std::string>();
     std::string BRITNEY_HINTDIR = config["BRITNEY_HINTDIR"].as<std::string>();
     std::string BRITNEY_LOC = config["BRITNEY_LOC"].as<std::string>();
 
@@ -389,10 +391,9 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
 
     // Create config file atomically
-    std::string configContent = readFile("britney.conf");
+    std::string configContent = readFile(BRITNEY_CONF);
     // Replace variables in configContent using configuration variables
-    configContent = std::regex_replace(configContent, std::regex("\\$\\{RELEASE\\}"), RELEASE);
-    configContent = std::regex_replace(configContent, std::regex("\\$\\{BRITNEY_DATADIR\\}"), BRITNEY_DATADIR);
+    configContent = std::regex_replace(configContent, std::regex("%\\{SERIES\\}"), RELEASE);
     writeFile("britney.conf", configContent);
 
     std::cout << "Running britney..." << std::endl;
@@ -406,9 +407,8 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     }
 
     std::cout << "Syncing output to frontend..." << std::endl;
-    // Rsync command can be replaced with filesystem copy
-    fs::remove_all("output");
-    fs::copy("output", "../../output/britney", fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+    fs::copy(BRITNEY_OUTDIR, BRITNEY_PUBLIC_OUTDIR, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+    fs::remove_all(BRITNEY_OUTDIR);
 
     std::cout << "Moving packages..." << std::endl;
 
