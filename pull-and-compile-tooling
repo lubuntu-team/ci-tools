@@ -4,7 +4,7 @@ git pull
 
 (cd ../launchpadlib-cpp && git pull
 rm -rf build; mkdir build && (cd build &&
-cmake .. -DCMAKE_INSTALL_PREFIX=/srv/lubuntu-ci/repos/ci-tools &&
+cmake .. &&
 make -j$(nproc)) &&
 cmake --install . --prefix /srv/lubuntu-ci/repos/ci-tools &&
 mv build/build-packages ../ && rm -rf build)
