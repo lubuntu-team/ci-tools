@@ -2,7 +2,7 @@
 
 git pull
 
-(cd ../launchpadlib-cpp && git pull
+(cd ../launchpadlib-cpp && git pull &&
 rm -rf build; mkdir build && (cd build &&
 cmake .. &&
 make -j$(nproc)) &&
