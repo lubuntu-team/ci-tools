@@ -7,4 +7,5 @@ After=network.target nginx.service
 Type=simple
 User=lugito
 Group=lugito
+Nice=17
 ExecStart=/srv/lubuntu-ci/repos/ci-tools/lintian-ppa -u lubuntu-ci -p unstable-ci-proposed

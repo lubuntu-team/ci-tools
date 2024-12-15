@@ -7,5 +7,6 @@ After=network.target
 Type=simple
 User=lugito
 Group=lugito
+Nice=18
 WorkingDirectory=/srv/lubuntu-ci/repos/ci-tools/
 ExecStart=/srv/lubuntu-ci/repos/ci-tools/pull-and-compile-tooling

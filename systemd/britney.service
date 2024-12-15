@@ -7,5 +7,6 @@ After=network.target nginx.service
 Type=simple
 User=lugito
 Group=lugito
+Nice=16
 WorkingDirectory=/srv/lubuntu-ci/repos/ci-tools
 ExecStart=/srv/lubuntu-ci/repos/ci-tools/fetch-indexes -c /srv/lubuntu-ci/repos/ci-tools/configs/fetch-indexes.yaml
