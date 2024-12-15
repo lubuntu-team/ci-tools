@@ -122,8 +122,7 @@ def process_sources(url):
         lintian_output = f"{stderr}\n{stdout}"
 
     output_path = os.path.join(lintian_tmp, source)
-    if not os.path.exists(output_path):
-        os.mkdir(output_path)
+    os.makedirs(output_path, exist_ok=True)
 
     with open(os.path.join(output_path, f"{arch}.txt"), "w") as f:
         f.write(lintian_output)
