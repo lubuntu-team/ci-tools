@@ -37,26 +37,28 @@
 #include <ctime>
 #include <numeric>
 #include <semaphore>
+#include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
 
 #include <git2.h>
 
 namespace fs = std::filesystem;
 
-// Define the semaphore with a limit of 5 concurrent jobs
+// Define the semaphore with a limit of 5 concurrent package processing tasks
 static std::counting_semaphore<5> semaphore(5);
 
-// RAII helper class for semaphore management
-struct SemaphoreGuard {
-    std::counting_semaphore<5>& sem;
+// Mutex to protect access to the repo_mutexes map
+static std::mutex repo_map_mutex;
 
-    SemaphoreGuard(std::counting_semaphore<5>& s) : sem(s) {
-        sem.acquire(); // Acquire a slot
-    }
+// Map to hold mutexes for each repository path
+static std::unordered_map<fs::path, std::mutex> repo_mutexes;
 
-    ~SemaphoreGuard() {
-        sem.release(); // Release the slot when out of scope
-    }
-};
+// Helper function to get the mutex for a given repository path
+static std::mutex& get_repo_mutex(const fs::path& repo_path) {
+    std::lock_guard<std::mutex> lock(repo_map_mutex);
+    return repo_mutexes[repo_path];
+}
 
 static const std::string BASE_DIR = "/srv/lubuntu-ci/repos";
 static const std::string DEBFULLNAME = "Lugito";
@@ -367,6 +369,316 @@ static std::vector<std::string> get_exclusions(const fs::path &packaging) {
     return exclusions;
 }
 
+static void run_source_lintian(const std::string &name, const fs::path &source_path) {
+    log_info("Running Lintian for package: " + name);
+    fs::path temp_file = fs::temp_directory_path() / ("lintian_suppress_" + name + ".txt");
+    {
+        std::ofstream of(temp_file);
+        for (auto &tag: SUPPRESSED_LINTIAN_TAGS) {
+            of << tag << "\n";
+        }
+    }
+    log_verbose("Created Lintian suppression file: " + temp_file.string());
+    std::string cmd = "lintian -EvIL +pedantic --suppress-tags-from-file " + temp_file.string() + " " + source_path.string() + " 2>&1";
+    FILE* pipe = popen(cmd.c_str(), "r");
+    std::stringstream ss;
+    if(pipe) {
+        char buffer[256];
+        while(fgets(buffer, sizeof(buffer), pipe)) {
+            ss << buffer;
+        }
+        int ret = pclose(pipe);
+        fs::remove(temp_file);
+        log_verbose("Lintian command exited with code: " + std::to_string(ret));
+        if(ret != 0) {
+            log_error("Lintian reported issues for " + name + ":\n" + ss.str());
+            if(!ss.str().empty()) {
+                fs::path pkgdir = fs::path(BASE_LINTIAN_DIR) / name;
+                fs::create_directories(pkgdir);
+                std::ofstream out(pkgdir / "source.txt", std::ios::app);
+                out << ss.str() << "\n";
+            }
+        } else {
+            if(!ss.str().empty()) {
+                fs::path pkgdir = fs::path(BASE_LINTIAN_DIR) / name;
+                fs::create_directories(pkgdir);
+                std::ofstream out(pkgdir / "source.txt", std::ios::app);
+                out << ss.str() << "\n";
+            }
+        }
+    } else {
+        fs::remove(temp_file);
+        log_error("Failed to run Lintian for package: " + name);
+    }
+    log_verbose("Completed Lintian run for package: " + name);
+}
+
+static void dput_source(const std::string &name, const std::string &upload_target, const std::vector<std::string> &changes_files, const std::vector<std::string> &devel_changes_files) {
+    log_info("Uploading changes for package: " + name + " to " + upload_target);
+    if(!changes_files.empty()) {
+        std::string hr_changes;
+        for(auto &c: changes_files) hr_changes += c + " ";
+        log_verbose("Changes files: " + hr_changes);
+        std::vector<std::string> cmd = {"dput", upload_target};
+        for(auto &c: changes_files) cmd.push_back(c);
+        try {
+            run_command_silent_on_success(cmd, OUTPUT_DIR);
+            log_info("Successfully uploaded changes for package: " + name);
+            for(auto &file: devel_changes_files) {
+                if(!file.empty()) {
+                    run_source_lintian(name, file);
+                }
+            }
+        } catch (...) {
+            log_error("Failed to upload changes for package: " + name);
+            // Errors are already logged in run_command_silent_on_success
+        }
+    } else {
+        log_warning("No changes files to upload for package: " + name);
+    }
+}
+
+static void update_changelog(const fs::path &packaging_dir, const std::string &release, const std::string &version_with_epoch) {
+    std::string name = packaging_dir.filename().string();
+    log_info("Updating changelog for " + name + " to version " + version_with_epoch + "-0ubuntu1~ppa1");
+    try {
+        run_command_silent_on_success({"git", "checkout", "debian/changelog"}, packaging_dir);
+        log_verbose("Checked out debian/changelog for " + name);
+    } catch (const std::exception &e) {
+        log_error("Failed to checkout debian/changelog for " + name + ": " + e.what());
+        throw;
+    }
+    std::vector<std::string> cmd = {
+        "dch", "--distribution", release, "--package", name, "--newversion", version_with_epoch + "-0ubuntu1~ppa1",
+        "--urgency", urgency_level_override, "CI upload."
+    };
+    run_command_silent_on_success(cmd, packaging_dir);
+    log_info("Changelog updated for " + name);
+}
+
+static std::string build_package(const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large) {
+    std::string name = packaging_dir.filename().string();
+    log_info("Building source package for " + name);
+    fs::path temp_dir;
+
+    if(large) {
+        temp_dir = fs::path(OUTPUT_DIR) / (".tmp_" + name + "_" + env_vars.at("VERSION"));
+        fs::create_directories(temp_dir);
+    } else {
+        temp_dir = fs::temp_directory_path() / ("tmp_build_" + name + "_" + env_vars.at("VERSION"));
+        fs::create_directories(temp_dir);
+    }
+
+    std::error_code ec;
+    fs::path temp_packaging_dir = temp_dir / name;
+    fs::create_directories(temp_packaging_dir, ec);
+    if(ec) {
+        log_error("Failed to create temporary packaging directory: " + temp_packaging_dir.string());
+        throw std::runtime_error("Temporary packaging directory creation failed");
+    }
+    log_verbose("Temporary packaging directory created at: " + temp_packaging_dir.string());
+
+    fs::copy(packaging_dir / "debian", temp_packaging_dir / "debian", fs::copy_options::recursive, ec);
+    if(ec) {
+        log_error("Failed to copy debian directory to temporary packaging directory: " + ec.message());
+        throw std::runtime_error("Failed to copy debian directory");
+    }
+    log_verbose("Copied debian directory to temporary packaging directory.");
+
+    std::string tarball_name = name + "_" + env_vars.at("VERSION") + ".orig.tar.gz";
+    fs::path tarball_source = fs::path(BASE_DIR) / (name + "_MAIN.orig.tar.gz");
+    fs::path tarball_dest = temp_dir / tarball_name;
+    fs::copy_file(tarball_source, tarball_dest, fs::copy_options::overwrite_existing, ec);
+    if(ec) {
+        log_error("Failed to copy tarball from " + tarball_source.string() + " to " + tarball_dest.string());
+        throw std::runtime_error("Failed to copy tarball");
+    }
+    log_verbose("Copied tarball to " + tarball_dest.string());
+
+    for (auto &e: env_vars) {
+        setenv(e.first.c_str(), e.second.c_str(), 1);
+        log_verbose("Set environment variable: " + e.first + " = " + e.second);
+    }
+
+    std::vector<std::string> cmd_build = {"debuild", "--no-lintian", "-S", "-d", "-sa", "-nc"};
+    run_command_silent_on_success(cmd_build, temp_packaging_dir);
+    run_command_silent_on_success({"git", "checkout", "debian/changelog"}, packaging_dir);
+    log_info("Built package for " + name);
+
+    std::string pattern = name + "_" + env_vars.at("VERSION");
+    std::string changes_file;
+    for(auto &entry: fs::directory_iterator(temp_dir)) {
+        std::string fname = entry.path().filename().string();
+        if(fname.rfind(pattern, 0) == 0) {
+            fs::path dest = fs::path(OUTPUT_DIR) / fname;
+            fs::copy_file(entry.path(), dest, fs::copy_options::overwrite_existing, ec);
+            if(!ec) {
+                log_verbose("Copied built package " + fname + " to " + OUTPUT_DIR);
+            }
+        }
+    }
+
+    for(auto &entry : fs::directory_iterator(OUTPUT_DIR)) {
+        std::string fname = entry.path().filename().string();
+        if(fname.rfind(name + "_" + env_vars.at("VERSION"), 0) == 0 && fname.ends_with("_source.changes")) {
+            changes_file = entry.path().string();
+            log_info("Found changes file: " + changes_file);
+        }
+    }
+
+    fs::remove_all(temp_dir, ec);
+    if(ec) {
+        log_warning("Failed to remove temporary directory: " + temp_dir.string());
+    } else {
+        log_verbose("Removed temporary build directory: " + temp_dir.string());
+    }
+
+    if(changes_file.empty()) {
+        log_error("No changes file found after build for package: " + name);
+        throw std::runtime_error("Changes file not found");
+    }
+    log_info("Built package successfully, changes file: " + changes_file);
+    return changes_file;
+}
+
+static void process_package(const YAML::Node &pkg, const YAML::Node &releases) {
+    // Acquire semaphore to limit concurrent package processing
+    semaphore.acquire();
+    try {
+        std::string name = pkg["name"] ? pkg["name"].as<std::string>() : "";
+        std::string upload_target = pkg["upload_target"] ? pkg["upload_target"].as<std::string>() : "ppa:lubuntu-ci/unstable-ci-proposed";
+        if(name.empty()) {
+            log_warning("Skipping package due to missing name.");
+            semaphore.release();
+            return;
+        }
+        log_info("Processing package: " + name);
+        fs::path packaging_destination = fs::path(BASE_DIR) / name;
+        fs::path changelog_path = packaging_destination / "debian" / "changelog";
+        std::string version = ""; // To be parsed after locking repos
+
+        // Determine repository paths
+        std::string upstream_url = pkg["upstream_url"] ? pkg["upstream_url"].as<std::string>() : ("https://github.com/lxqt/" + name + ".git");
+        fs::path upstream_destination = fs::path(BASE_DIR) / ("upstream-" + name);
+        std::optional<std::string> packaging_branch = std::nullopt;
+        if(pkg["packaging_branch"] && pkg["packaging_branch"].IsScalar()) {
+            packaging_branch = pkg["packaging_branch"].as<std::string>();
+        } else if (releases.size() > 0) {
+            packaging_branch = "ubuntu/" + releases[0].as<std::string>();
+        }
+        std::string packaging_url = pkg["packaging_url"] ? pkg["packaging_url"].as<std::string>() : ("https://git.lubuntu.me/Lubuntu/" + name + "-packaging.git");
+        fs::path packaging_repo = packaging_destination;
+
+        // Acquire mutexes for Git repositories
+        std::mutex& upstream_mutex = get_repo_mutex(upstream_destination);
+        std::mutex& packaging_mutex = get_repo_mutex(packaging_repo);
+
+        // Lock both mutexes without deadlock using std::scoped_lock
+        std::scoped_lock lock(upstream_mutex, packaging_mutex);
+
+        // Perform Git operations and tarball processing
+        git_fetch_and_checkout(upstream_destination, upstream_url, std::nullopt);
+        git_fetch_and_checkout(packaging_repo, packaging_url, packaging_branch);
+        try {
+            log_info("Updating maintainer for package: " + name);
+            update_maintainer((packaging_destination / "debian").string(), false);
+            log_info("Maintainer updated for package: " + name);
+        } catch(std::exception &e) {
+            log_warning("update_maintainer error for " + name + ": " + std::string(e.what()));
+        }
+
+        auto exclusions = get_exclusions(packaging_destination);
+        log_info("Creating tarball for package: " + name);
+        create_tarball(name, upstream_destination, exclusions);
+        log_info("Tarball created for package: " + name);
+
+        // Parse version after creating tarball
+        version = parse_version(changelog_path);
+
+        // Determine if package is large
+        bool large = pkg["large"] ? pkg["large"].as<bool>() : false;
+        if(large) {
+            log_info("Package " + name + " is marked as large.");
+        }
+
+        // Prepare environment variables for building
+        std::map<std::string, std::string> env_map;
+        env_map["DEBFULLNAME"] = DEBFULLNAME;
+        env_map["DEBEMAIL"] = DEBEMAIL;
+
+        // Update environment variables based on version
+        std::string epoch;
+        std::string version_no_epoch = version;
+        if(auto pos = version.find(':'); pos != std::string::npos) {
+            epoch = version.substr(0, pos);
+            version_no_epoch = version.substr(pos + 1);
+            log_verbose("Package " + name + " has epoch: " + epoch);
+        }
+        env_map["VERSION"] = version_no_epoch;
+
+        // Build packages for all releases sequentially
+        std::vector<std::string> changes_files;
+        std::vector<std::string> devel_changes_files;
+        for(auto rel : releases) {
+            std::string release = rel.as<std::string>();
+            log_info("Building " + name + " for release: " + release);
+
+            std::string release_version_no_epoch = version_no_epoch + "~" + release;
+            std::string version_for_dch = epoch.empty() ? release_version_no_epoch : (epoch + ":" + release_version_no_epoch);
+            env_map["UPLOAD_TARGET"] = upload_target;
+
+            // Update changelog
+            update_changelog(packaging_destination, release, version_for_dch);
+
+            // Set environment variables
+            env_map["VERSION"] = release_version_no_epoch;
+
+            // Build package
+            try {
+                std::string changes_file = build_package(packaging_destination, env_map, large);
+                if(!changes_file.empty()) {
+                    changes_files.push_back(changes_file);
+                    // Determine if this changes file is for the first release (devel)
+                    if(rel == releases[0]) {
+                        devel_changes_files.push_back(changes_file);
+                    } else {
+                        devel_changes_files.push_back("");
+                    }
+                }
+            } catch(std::exception &e) {
+                log_error("Error building package '" + name + "' for release '" + release + "': " + std::string(e.what()));
+            }
+        }
+
+        // After building, remove the main orig tarball
+        fs::path main_tarball = fs::path(BASE_DIR) / (name + "_MAIN.orig.tar.gz");
+        fs::remove(main_tarball);
+        log_verbose("Removed main orig tarball for package: " + name);
+
+        // Release the semaphore before launching dput
+        semaphore.release();
+
+        // Handle dput upload asynchronously
+        if(!changes_files.empty() && !upload_target.empty()) {
+            std::vector<std::string> dput_changes = changes_files;
+            std::vector<std::string> dput_devel_changes = devel_changes_files;
+            std::async(std::launch::async, [name, upload_target, dput_changes, dput_devel_changes]() {
+                dput_source(name, upload_target, dput_changes, dput_devel_changes);
+            });
+        } else {
+            log_warning("No changes files to upload for package: " + name);
+        }
+    }
+}
+
+static void prepare_package(const YAML::Node &pkg, const YAML::Node &releases) {
+    try {
+        process_package(pkg, releases);
+    } catch(const std::exception &e) {
+        log_error(std::string("Exception in processing package: ") + e.what());
+    }
+}
+
 int main(int argc, char** argv) {
     // Parse command-line arguments first to set verbosity
     std::string prog_name = fs::path(argv[0]).filename().string();
@@ -467,407 +779,10 @@ int main(int argc, char** argv) {
     fs::current_path(BASE_DIR);
     log_info("Set current working directory to BASE_DIR: " + BASE_DIR);
 
-    auto get_packaging_branch = [&](const YAML::Node &pkg) -> std::optional<std::string> {
-        if(pkg["packaging_branch"] && pkg["packaging_branch"].IsScalar()) {
-            std::string branch = pkg["packaging_branch"].as<std::string>();
-            log_info("Packaging branch for package: " + branch);
-            return branch;
-        } else if (releases.size() > 0) {
-            std::string branch = "ubuntu/" + releases[0].as<std::string>();
-            log_info("Default packaging branch set to: " + branch);
-            return branch;
-        }
-        return std::nullopt;
-    };
-
-    auto parse_version = [&](const fs::path &changelog_path) -> std::string {
-        log_info("Parsing version from changelog: " + changelog_path.string());
-        std::ifstream f(changelog_path);
-        if(!f) {
-            log_error("Changelog not found: " + changelog_path.string());
-            throw std::runtime_error("Changelog not found: " + changelog_path.string());
-        }
-        std::string first_line;
-        std::getline(f, first_line);
-        size_t start = first_line.find('(');
-        size_t end = first_line.find(')');
-        if(start == std::string::npos || end == std::string::npos) {
-            log_error("Invalid changelog format in " + changelog_path.string());
-            throw std::runtime_error("Invalid changelog format");
-        }
-        std::string version_match = first_line.substr(start + 1, end - (start + 1));
-        log_verbose("Extracted version: " + version_match);
-        std::string epoch;
-        std::string upstream_version = version_match;
-        if(auto pos = version_match.find(':'); pos != std::string::npos) {
-            epoch = version_match.substr(0, pos);
-            upstream_version = version_match.substr(pos + 1);
-            log_verbose("Parsed epoch: " + epoch + ", upstream version: " + upstream_version);
-        }
-        if(auto pos = upstream_version.find('-'); pos != std::string::npos) {
-            upstream_version = upstream_version.substr(0, pos);
-            log_verbose("Trimmed upstream version: " + upstream_version);
-        }
-        std::regex git_regex("(\\+git[0-9]+)?(~[a-z]+)?$");
-        upstream_version = std::regex_replace(upstream_version, git_regex, "");
-        log_verbose("Upstream version after regex: " + upstream_version);
-        auto t = std::time(nullptr);
-        std::tm tm_utc;
-        gmtime_r(&t, &tm_utc);
-        char buf_version[20];
-        std::strftime(buf_version, sizeof(buf_version), "%Y%m%d%H%M", &tm_utc);
-        std::string current_date = buf_version;
-        std::string version;
-        if(!epoch.empty()) {
-            version = epoch + ":" + upstream_version + "+git" + current_date;
-        } else {
-            version = upstream_version + "+git" + current_date;
-        }
-        log_info("Final parsed version: " + version);
-        return version;
-    };
-
-    auto run_source_lintian = [&](const std::string &name, const fs::path &source_path) {
-        log_info("Running Lintian for package: " + name);
-        fs::path temp_file = fs::temp_directory_path() / ("lintian_suppress_" + name + ".txt");
-        {
-            std::ofstream of(temp_file);
-            for (auto &tag: SUPPRESSED_LINTIAN_TAGS) {
-                of << tag << "\n";
-            }
-        }
-        log_verbose("Created Lintian suppression file: " + temp_file.string());
-        std::string cmd = "lintian -EvIL +pedantic --suppress-tags-from-file " + temp_file.string() + " " + source_path.string() + " 2>&1";
-        FILE* pipe = popen(cmd.c_str(), "r");
-        std::stringstream ss;
-        if(pipe) {
-            char buffer[256];
-            while(fgets(buffer, sizeof(buffer), pipe)) {
-                ss << buffer;
-            }
-            int ret = pclose(pipe);
-            fs::remove(temp_file);
-            log_verbose("Lintian command exited with code: " + std::to_string(ret));
-            if(ret != 0) {
-                log_error("Lintian reported issues for " + name + ":\n" + ss.str());
-                if(!ss.str().empty()) {
-                    fs::path pkgdir = fs::path(BASE_LINTIAN_DIR) / name;
-                    fs::create_directories(pkgdir);
-                    std::ofstream out(pkgdir / "source.txt", std::ios::app);
-                    out << ss.str() << "\n";
-                }
-            } else {
-                if(!ss.str().empty()) {
-                    fs::path pkgdir = fs::path(BASE_LINTIAN_DIR) / name;
-                    fs::create_directories(pkgdir);
-                    std::ofstream out(pkgdir / "source.txt", std::ios::app);
-                    out << ss.str() << "\n";
-                }
-            }
-        } else {
-            fs::remove(temp_file);
-            log_error("Failed to run Lintian for package: " + name);
-        }
-        log_verbose("Completed Lintian run for package: " + name);
-    };
-
-    auto dput_source = [&](const std::string &name, const std::string &upload_target, const std::vector<std::string> &changes_files, const std::vector<std::string> &devel_changes_files) {
-        log_info("Uploading changes for package: " + name + " to " + upload_target);
-        if(!changes_files.empty()) {
-            std::string hr_changes;
-            for(auto &c: changes_files) hr_changes += c + " ";
-            log_verbose("Changes files: " + hr_changes);
-            std::vector<std::string> cmd = {"dput", upload_target};
-            for(auto &c: changes_files) cmd.push_back(c);
-            try {
-                run_command_silent_on_success(cmd, OUTPUT_DIR);
-                log_info("Successfully uploaded changes for package: " + name);
-                for(auto &file: devel_changes_files) {
-                    if(!file.empty()) {
-                        run_source_lintian(name, file);
-                    }
-                }
-            } catch (...) {
-                log_error("Failed to upload changes for package: " + name);
-            }
-        } else {
-            log_warning("No changes files to upload for package: " + name);
-        }
-    };
-
-    auto update_changelog = [&](const fs::path &packaging_dir, const std::string &release, const std::string &version_with_epoch) {
-        std::string name = packaging_dir.filename().string();
-        log_info("Updating changelog for " + name + " to version " + version_with_epoch + "-0ubuntu1~ppa1");
-        try {
-            run_command_silent_on_success({"git", "checkout", "debian/changelog"}, packaging_dir);
-            log_verbose("Checked out debian/changelog for " + name);
-        } catch (const std::exception &e) {
-            log_error("Failed to checkout debian/changelog for " + name + ": " + e.what());
-            throw;
-        }
-        std::vector<std::string> cmd = {
-            "dch", "--distribution", release, "--package", name, "--newversion", version_with_epoch + "-0ubuntu1~ppa1",
-            "--urgency", urgency_level_override, "CI upload."
-        };
-        run_command_silent_on_success(cmd, packaging_dir);
-        log_info("Changelog updated for " + name);
-    };
-
-    auto build_package = [&](const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large) -> std::string {
-        // Acquire semaphore for all operations within this function
-        SemaphoreGuard guard(semaphore);
-
-        std::string name = packaging_dir.filename().string();
-        log_info("Building source package for " + name);
-        fs::path temp_dir;
-
-        if(large) {
-            temp_dir = fs::path(OUTPUT_DIR) / (".tmp_" + name + "_" + env_vars.at("VERSION"));
-            fs::create_directories(temp_dir);
-        } else {
-            temp_dir = fs::temp_directory_path() / ("tmp_build_" + name + "_" + env_vars.at("VERSION"));
-            fs::create_directories(temp_dir);
-        }
-
-        std::error_code ec;
-        fs::path temp_packaging_dir = temp_dir / name;
-        fs::create_directories(temp_packaging_dir, ec);
-        if(ec) {
-            log_error("Failed to create temporary packaging directory: " + temp_packaging_dir.string());
-            throw std::runtime_error("Temporary packaging directory creation failed");
-        }
-        log_verbose("Temporary packaging directory created at: " + temp_packaging_dir.string());
-
-        fs::copy(packaging_dir / "debian", temp_packaging_dir / "debian", fs::copy_options::recursive, ec);
-        if(ec) {
-            log_error("Failed to copy debian directory to temporary packaging directory: " + ec.message());
-            throw std::runtime_error("Failed to copy debian directory");
-        }
-        log_verbose("Copied debian directory to temporary packaging directory.");
-
-        std::string tarball_name = name + "_" + env_vars.at("VERSION") + ".orig.tar.gz";
-        fs::path tarball_source = fs::path(BASE_DIR) / (name + "_MAIN.orig.tar.gz");
-        fs::path tarball_dest = temp_dir / tarball_name;
-        fs::copy_file(tarball_source, tarball_dest, fs::copy_options::overwrite_existing, ec);
-        if(ec) {
-            log_error("Failed to copy tarball from " + tarball_source.string() + " to " + tarball_dest.string());
-            throw std::runtime_error("Failed to copy tarball");
-        }
-        log_verbose("Copied tarball to " + tarball_dest.string());
-
-        for (auto &e: env_vars) {
-            setenv(e.first.c_str(), e.second.c_str(), 1);
-            log_verbose("Set environment variable: " + e.first + " = " + e.second);
-        }
-
-        std::vector<std::string> cmd_build = {"debuild", "--no-lintian", "-S", "-d", "-sa", "-nc"};
-        run_command_silent_on_success(cmd_build, temp_packaging_dir);
-        run_command_silent_on_success({"git", "checkout", "debian/changelog"}, packaging_dir);
-        log_info("Built package for " + name);
-
-        std::string pattern = name + "_" + env_vars.at("VERSION");
-        std::string changes_file;
-        for(auto &entry: fs::directory_iterator(temp_dir)) {
-            std::string fname = entry.path().filename().string();
-            if(fname.rfind(pattern, 0) == 0) {
-                fs::path dest = fs::path(OUTPUT_DIR) / fname;
-                fs::copy_file(entry.path(), dest, fs::copy_options::overwrite_existing, ec);
-                if(!ec) {
-                    log_verbose("Copied built package " + fname + " to " + OUTPUT_DIR);
-                }
-            }
-        }
-
-        for(auto &entry : fs::directory_iterator(OUTPUT_DIR)) {
-            std::string fname = entry.path().filename().string();
-            if(fname.rfind(name + "_" + env_vars.at("VERSION"), 0) == 0 && fname.ends_with("_source.changes")) {
-                changes_file = entry.path().string();
-                log_info("Found changes file: " + changes_file);
-            }
-        }
-
-        fs::remove_all(temp_dir, ec);
-        if(ec) {
-            log_warning("Failed to remove temporary directory: " + temp_dir.string());
-        } else {
-            log_verbose("Removed temporary build directory: " + temp_dir.string());
-        }
-
-        if(changes_file.empty()) {
-            log_error("No changes file found after build for package: " + name);
-            throw std::runtime_error("Changes file not found");
-        }
-        log_info("Built package successfully, changes file: " + changes_file);
-        return changes_file;
-    };
-
-    auto process_package = [&](const YAML::Node &pkg) {
-        std::string name = pkg["name"] ? pkg["name"].as<std::string>() : "";
-        std::string upload_target = pkg["upload_target"] ? pkg["upload_target"].as<std::string>() : "ppa:lubuntu-ci/unstable-ci-proposed";
-        if(name.empty()) {
-            log_warning("Skipping package due to missing name.");
-            return;
-        }
-        log_info("Processing package: " + name);
-        fs::path packaging_destination = fs::path(BASE_DIR) / name;
-        fs::path changelog_path = packaging_destination / "debian" / "changelog";
-        std::string version = parse_version(changelog_path);
-
-        bool large = pkg["large"] ? pkg["large"].as<bool>() : false;
-        if(large) {
-            log_info("Package " + name + " is marked as large.");
-        }
-
-        std::vector<std::pair<std::string, std::map<std::string, std::string>>> built_changes;
-
-        std::string epoch;
-        std::string version_no_epoch = version;
-        if(auto pos = version.find(':'); pos != std::string::npos) {
-            epoch = version.substr(0, pos);
-            version_no_epoch = version.substr(pos + 1);
-            log_verbose("Package " + name + " has epoch: " + epoch);
-        }
-
-        for(auto rel : releases) {
-            std::string release = rel.as<std::string>();
-            log_info("Building " + name + " for release: " + release);
-
-            std::string release_version_no_epoch = version_no_epoch + "~" + release;
-            fs::path tarball_source = fs::path(BASE_DIR) / (name + "_MAIN.orig.tar.gz");
-            fs::path tarball_dest = fs::path(BASE_DIR) / (name + "_" + release_version_no_epoch + ".orig.tar.gz");
-            std::error_code ec;
-            fs::copy_file(tarball_source, tarball_dest, fs::copy_options::overwrite_existing, ec);
-            if(ec) {
-                log_error("Failed to copy tarball for " + name + " to " + tarball_dest.string());
-                continue;
-            }
-            log_verbose("Copied tarball to " + tarball_dest.string());
-
-            std::string version_for_dch = epoch.empty() ? release_version_no_epoch : (epoch + ":" + release_version_no_epoch);
-            log_verbose("Version for dch: " + version_for_dch);
-
-            std::map<std::string, std::string> env_map;
-            env_map["DEBFULLNAME"] = DEBFULLNAME;
-            env_map["DEBEMAIL"] = DEBEMAIL;
-            env_map["VERSION"] = release_version_no_epoch;
-            env_map["UPLOAD_TARGET"] = upload_target;
-
-            try {
-                update_changelog(packaging_destination, release, version_for_dch);
-                std::string changes_file = build_package(packaging_destination, env_map, large);
-                if(!changes_file.empty()) {
-                    built_changes.emplace_back(changes_file, env_map);
-                }
-            } catch(std::exception &e) {
-                log_error("Error processing package '" + name + "' for release '" + release + "': " + std::string(e.what()));
-            }
-
-            fs::remove(tarball_dest, ec);
-            if(ec) {
-                log_warning("Failed to remove tarball: " + tarball_dest.string());
-            } else {
-                log_verbose("Removed tarball: " + tarball_dest.string());
-            }
-        }
-
-        std::vector<std::string> changes_files;
-        for(auto &bc : built_changes) {
-            fs::path cf(bc.first);
-            changes_files.push_back(cf.filename().string());
-        }
-
-        std::unordered_set<std::string> devel_changes_files;
-        if(releases.size() > 0) {
-            std::string first_release = releases[0].as<std::string>();
-            for(auto &f : changes_files) {
-                if(f.find("~" + first_release) != std::string::npos) {
-                    devel_changes_files.insert((fs::path(OUTPUT_DIR) / f).string());
-                } else {
-                    devel_changes_files.insert(std::string());
-                }
-            }
-        }
-
-        if(built_changes.empty()) {
-            log_warning("No built changes files for package: " + name);
-            return;
-        }
-
-        if(getenv("DEBFULLNAME") == nullptr) {
-            setenv("DEBFULLNAME", DEBFULLNAME.c_str(), 1);
-            log_info("Set DEBFULLNAME environment variable.");
-        }
-        if(getenv("DEBEMAIL") == nullptr) {
-            setenv("DEBEMAIL", DEBEMAIL.c_str(), 1);
-            log_info("Set DEBEMAIL environment variable.");
-        }
-
-        if(skip_dput) {
-            log_info("Skipping dput upload for package: " + name);
-            for(auto &file : devel_changes_files) {
-                if(!file.empty()) {
-                    run_source_lintian(name, file);
-                }
-            }
-        } else {
-            std::string real_upload_target = built_changes[0].second.at("UPLOAD_TARGET");
-            dput_source(name, real_upload_target, changes_files, std::vector<std::string>(devel_changes_files.begin(), devel_changes_files.end()));
-        }
-
-        fs::remove(fs::path(BASE_DIR) / (name + "_MAIN.orig.tar.gz"));
-        log_verbose("Removed main orig tarball for package: " + name);
-    };
-
-    auto prepare_package = [&](const YAML::Node &pkg) {
-        std::string name = pkg["name"] ? pkg["name"].as<std::string>() : "";
-        if(name.empty()) {
-            log_warning("Skipping package due to missing name.");
-            return;
-        }
-        log_info("Preparing package: " + name);
-
-        std::string upstream_url = pkg["upstream_url"] ? pkg["upstream_url"].as<std::string>() : ("https://github.com/lxqt/" + name + ".git");
-        log_verbose("Upstream URL: " + upstream_url);
-        fs::path upstream_destination = fs::path(BASE_DIR) / ("upstream-" + name);
-        std::optional<std::string> packaging_branch = get_packaging_branch(pkg);
-        std::string packaging_url = pkg["packaging_url"] ? pkg["packaging_url"].as<std::string>() : ("https://git.lubuntu.me/Lubuntu/" + name + "-packaging.git");
-        log_verbose("Packaging URL: " + packaging_url);
-        fs::path packaging_destination = fs::path(BASE_DIR) / name;
-
-        try {
-            git_fetch_and_checkout(upstream_destination, upstream_url, std::nullopt);
-        } catch(...) {
-            log_error("Failed to prepare upstream repo for " + name);
-            return;
-        }
-
-        try {
-            git_fetch_and_checkout(packaging_destination, packaging_url, packaging_branch);
-        } catch(...) {
-            log_error("Failed to prepare packaging repo for " + name);
-            return;
-        }
-
-        try {
-            log_info("Updating maintainer for package: " + name);
-            update_maintainer((packaging_destination / "debian").string(), false);
-            log_info("Maintainer updated for package: " + name);
-        } catch(std::exception &e) {
-            log_warning("update_maintainer error for " + name + ": " + std::string(e.what()));
-        }
-
-        auto exclusions = get_exclusions(packaging_destination);
-        log_info("Creating tarball for package: " + name);
-        create_tarball(name, upstream_destination, exclusions);
-        log_info("Tarball created for package: " + name);
-
-        process_package(pkg);
-    };
-
     std::vector<std::future<void>> futures;
     log_info("Starting package preparation for " + std::to_string(packages.size()) + " packages.");
     for(auto pkg : packages) {
-        futures.push_back(std::async(std::launch::async, prepare_package, pkg));
+        futures.emplace_back(std::async(std::launch::async, prepare_package, pkg, releases));
     }
 
     for(auto &fut : futures) {
