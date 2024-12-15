@@ -14,7 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "update-maintainer-lib.h"
-#include "update-maintainer.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
