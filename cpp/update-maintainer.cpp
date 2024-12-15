@@ -16,7 +16,7 @@
 #include "update-maintainer-lib.h"
 #include <iostream>
 
-int main(int argc, char** argv[]) {
+int main(int argc, char** argv) {
     if(argc < 2) {
         std::cerr << "Usage: update-maintainer <debian_directory> [--verbose]" << std::endl;
         return 1;
