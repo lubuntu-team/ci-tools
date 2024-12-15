@@ -2,12 +2,19 @@
 
 git pull
 
+(cd ../launchpadlib-cpp && git pull
+rm -rf build; mkdir build && (cd build &&
+cmake .. -DCMAKE_INSTALL_PREFIX=/srv/lubuntu-ci/repos/ci-tools &&
+make -j$(nproc)) &&
+cmake --install . --prefix /srv/lubuntu-ci/repos/ci-tools &&
+mv build/build-packages ../ && rm -rf build)
+
 (cd fetch-indexes-cpp &&
 rm -rf build; mkdir build && (cd build &&
-cmake .. && make -j$(nproc)) &&
+cmake .. -DCMAKE_PREFIX_PATH="/srv/lubuntu-ci/repos/ci-tools;${CMAKE_PREFIX_PATH}" && make -j$(nproc)) &&
 mv build/fetch-indexes ../ && rm -rf build)
 
 (cd build-packages-cpp &&
 rm -rf build; mkdir build && (cd build &&
-cmake .. && make -j$(nproc)) &&
+cmake .. -DCMAKE_PREFIX_PATH="/srv/lubuntu-ci/repos/ci-tools;${CMAKE_PREFIX_PATH}" && make -j$(nproc)) &&
 mv build/build-packages ../ && rm -rf build)

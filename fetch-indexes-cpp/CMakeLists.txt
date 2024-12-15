@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 find_package(CURL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(YAML-CPP REQUIRED)
+find_package(launchpadlib-cpp REQUIRED CONFIG)
 
 include_directories(${CURL_INCLUDE_DIRS})
 include_directories(${ZLIB_INCLUDE_DIRS})
@@ -14,4 +15,4 @@ include_directories(${YAML_CPP_INCLUDE_DIR})
 
 add_executable(fetch-indexes main.cpp utilities.cpp)
 
-target_link_libraries(fetch-indexes ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} yaml-cpp)
+target_link_libraries(fetch-indexes ${CURL_LIBRARIES} ${ZLIB_LIBRARIES} yaml-cpp launchpad::launchpad)
