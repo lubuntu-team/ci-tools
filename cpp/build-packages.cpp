@@ -36,10 +36,27 @@
 #include <yaml-cpp/yaml.h>
 #include <ctime>
 #include <numeric>
+#include <semaphore>
 
 #include <git2.h>
 
 namespace fs = std::filesystem;
+
+// Define the semaphore with a limit of 5 concurrent jobs
+static std::counting_semaphore<5> semaphore(5);
+
+// RAII helper class for semaphore management
+struct SemaphoreGuard {
+    std::counting_semaphore<5>& sem;
+
+    SemaphoreGuard(std::counting_semaphore<5>& s) : sem(s) {
+        sem.acquire(); // Acquire a slot
+    }
+
+    ~SemaphoreGuard() {
+        sem.release(); // Release the slot when out of scope
+    }
+};
 
 static const std::string BASE_DIR = "/srv/lubuntu-ci/repos";
 static const std::string DEBFULLNAME = "Lugito";
@@ -572,7 +589,6 @@ int main(int argc, char** argv) {
                 }
             } catch (...) {
                 log_error("Failed to upload changes for package: " + name);
-                // Errors are already logged in run_command_silent_on_success
             }
         } else {
             log_warning("No changes files to upload for package: " + name);
@@ -598,17 +614,19 @@ int main(int argc, char** argv) {
     };
 
     auto build_package = [&](const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large) -> std::string {
+        // Acquire semaphore for all operations within this function
+        SemaphoreGuard guard(semaphore);
+
         std::string name = packaging_dir.filename().string();
         log_info("Building source package for " + name);
         fs::path temp_dir;
+
         if(large) {
             temp_dir = fs::path(OUTPUT_DIR) / (".tmp_" + name + "_" + env_vars.at("VERSION"));
             fs::create_directories(temp_dir);
-            log_warning(name + " is large; building in " + temp_dir.string());
         } else {
             temp_dir = fs::temp_directory_path() / ("tmp_build_" + name + "_" + env_vars.at("VERSION"));
             fs::create_directories(temp_dir);
-            log_verbose("Created temporary build directory: " + temp_dir.string());
         }
 
         std::error_code ec;
