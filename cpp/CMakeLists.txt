@@ -21,8 +21,8 @@ include_directories(/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
 
 # Create the shared library liblubuntuci.so
 add_library(lubuntuci SHARED common.cpp utilities.cpp)
-target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(lubuntuci PRIVATE yaml-cpp CURL::libcurl ${YAML_CPP_LIBRARIES} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
+target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CURL_INCLUDE_DIRS})
+target_link_libraries(lubuntuci PRIVATE CURL::libcurl ${YAML_CPP_LIBRARIES} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
 # Ensure liblubuntuci has proper RPATH
 set_target_properties(lubuntuci PROPERTIES
