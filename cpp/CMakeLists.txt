@@ -20,28 +20,25 @@ add_library(lubuntuci SHARED common.cpp utilities.cpp)
 target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(lubuntuci PUBLIC yaml-cpp::yaml-cpp PRIVATE CURL::libcurl /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
-add_library(update_maintainer_lib STATIC update-maintainer.cpp)
-target_include_directories(update_maintainer_lib PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(update_maintainer_lib PRIVATE lubuntuci yaml-cpp::yaml-cpp CURL::libcurl)
+add_executable(update-maintainer update-maintainer.cpp)
+target_include_directories(update-maintainer PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
+target_link_libraries(update-maintainer PRIVATE lubuntuci yaml-cpp::yaml-cpp CURL::libcurl)
 
 add_executable(build-packages build-packages.cpp)
-target_link_libraries(build-packages PRIVATE lubuntuci PkgConfig::LIBGIT2 update_maintainer_lib)
+target_include_directories(build-packages PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
+target_link_libraries(build-packages PRIVATE lubuntuci PkgConfig::LIBGIT2 yaml-cpp::yaml-cpp)
 
 add_executable(fetch-indexes fetch-indexes.cpp utilities.cpp)
 target_include_directories(fetch-indexes PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
 target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::yaml-cpp ZLIB::ZLIB)
-
-add_executable(update-maintainer update-maintainer.cpp)
-target_link_libraries(update-maintainer PRIVATE update_maintainer_lib)
 
 set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "$ORIGIN/lib"
 )
 
-install(TARGETS lubuntuci update_maintainer_lib
+install(TARGETS lubuntuci
     LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
 )
 
 install(TARGETS build-packages fetch-indexes update-maintainer
