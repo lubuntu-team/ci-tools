@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include "utilities.h"
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -201,7 +203,7 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     // Get current timestamp
     std::time_t now_c = std::time(nullptr);
     char timestamp[20];
-    std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H:%M:%S", std::localtime(&now_c));
+    std::strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H%M%S", std::gmtime(&now_c));
     std::string BRITNEY_TIMESTAMP(timestamp);
 
     std::cout << "Release: " << RELEASE << std::endl;

@@ -13,8 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef UTILITIES_H
-#define UTILITIES_H
+#pragma once
 
 #include <string>
 #include <filesystem>
@@ -38,5 +37,3 @@ void downloadFileWithTimestamping(const std::string& url, const std::filesystem:
 
 // Helper function for libcurl write callback
 size_t write_data(void* ptr, size_t size, size_t nmemb, void* stream);
-
-#endif // UTILITIES_H

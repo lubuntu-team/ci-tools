@@ -1,4 +1,19 @@
-#include "update_maintainer.h"
+// Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#include "update-maintainer.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -57,19 +72,13 @@ static std::string get_distribution(const fs::path &changelog_file) {
     if(!f) throw MaintainerUpdateException("Unable to open changelog.");
     std::string first_line;
     std::getline(f, first_line);
-    // Format: "pkg (ver) dist; urgency=..."
-    // find ') '
     size_t pos = first_line.find(')');
     if(pos == std::string::npos) throw MaintainerUpdateException("Invalid changelog format");
-    // after ') ', next token is distribution until space
-    // skip ')'
     pos++;
     while(pos < first_line.size() && std::isspace((unsigned char)first_line[pos])) pos++;
-    // now read until space or ';'
     size_t start = pos;
     while(pos < first_line.size() && !std::isspace((unsigned char)first_line[pos]) && first_line[pos] != ';') pos++;
     std::string dist = first_line.substr(start, pos - start);
-    // remove -proposed-updates etc
     size_t dashpos = dist.find('-');
     if (dashpos != std::string::npos) {
         dist = dist.substr(0, dashpos);
@@ -201,4 +210,32 @@ void update_maintainer(const std::string &debian_directory, bool verbose) {
     std::string distribution = get_distribution(changelog);
 
     update_maintainer_file(*control_file, distribution, verbose);
+}
+
+int main(int argc, char** argv) {
+    if(argc < 2) {
+        std::cerr << "Usage: update-maintainer <debian_directory> [--verbose]" << std::endl;
+        return 1;
+    }
+
+    std::string debian_directory = argv[1];
+    bool verbose = false;
+    if(argc >=3 ) {
+        std::string flag = argv[2];
+        if(flag == "--verbose") {
+            verbose = true;
+        }
+    }
+
+    try {
+        update_maintainer(debian_directory, verbose);
+        if(verbose) {
+            std::cout << "Maintainer updated successfully." << std::endl;
+        }
+    } catch(const MaintainerUpdateException& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
 }

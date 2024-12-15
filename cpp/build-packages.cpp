@@ -1,3 +1,18 @@
+// Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #include "common.h"
 #include "update_maintainer.h"
 #include <iostream>
@@ -333,8 +348,8 @@ int main(int argc, char** argv) {
         std::string epoch;
         std::string upstream_version = version_match;
         if(auto pos=version_match.find(':'); pos!=std::string::npos) {
-            epoch = version_match.substr(0,pos);
-            upstream_version = version_match.substr(pos+1);
+            epoch=version_match.substr(0,pos);
+            upstream_version=version_match.substr(pos+1);
         }
         if(auto pos=upstream_version.find('-'); pos!=std::string::npos) {
             upstream_version=upstream_version.substr(0,pos);
@@ -409,7 +424,7 @@ int main(int argc, char** argv) {
                 log_info("Completed upload of changes to "+upload_target);
                 for(auto &file: devel_changes_files) {
                     if(!file.empty()) {
-                        run_source_lintian(name, file);
+                        run_source_lintian(name,file);
                     }
                 }
             } catch (...) {
@@ -521,7 +536,7 @@ int main(int argc, char** argv) {
             fs::path tarball_source = fs::path(BASE_DIR)/(name+"_MAIN.orig.tar.gz");
             fs::path tarball_dest = fs::path(BASE_DIR)/(name+"_"+release_version_no_epoch+".orig.tar.gz");
             fs::copy_file(tarball_source,tarball_dest,fs::copy_options::overwrite_existing);
-
+            
             std::string version_for_dch = epoch.empty()? release_version_no_epoch : (epoch+":"+release_version_no_epoch);
 
             std::map<std::string,std::string> env_map;
