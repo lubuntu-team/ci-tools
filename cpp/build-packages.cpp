@@ -14,7 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common.h"
-#include "update_maintainer.h"
+#include "update-maintainer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
