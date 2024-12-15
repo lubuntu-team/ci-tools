@@ -5,3 +5,5 @@ britney.conf
 cache/
 data/
 output/
+bin/
+lib/
