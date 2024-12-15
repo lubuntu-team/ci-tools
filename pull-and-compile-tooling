@@ -5,9 +5,9 @@ git pull
 (cd ../launchpadlib-cpp && git pull &&
 rm -rf build; mkdir build && (cd build &&
 cmake .. &&
-make -j$(nproc)) &&
-cmake --install . --prefix /srv/lubuntu-ci/repos/ci-tools &&
-mv build/build-packages ../ && rm -rf build)
+make -j$(nproc) &&
+cmake --install . --prefix /srv/lubuntu-ci/repos/ci-tools) &&
+rm -rf build)
 
 (cd fetch-indexes-cpp &&
 rm -rf build; mkdir build && (cd build &&
