@@ -382,7 +382,7 @@ int main(int argc, char** argv) {
     std::tm tm;
     gmtime_r(&now, &tm);
     char buf_time[20];
-    std::strftime(buf_time, sizeof(buf_time), "%Y-%m-%dT%H:%M:%S", &tm);
+    std::strftime(buf_time, sizeof(buf_time), "%Y%m%dT%H%M%S", &tm);
     std::string current_time = buf_time;
 
     std::string uuid_part = current_time.substr(0,10); // Adjusted to match timestamp length
@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
         std::tm tm_utc;
         gmtime_r(&t, &tm_utc);
         char buf_version[20];
-        std::strftime(buf_version, sizeof(buf_version), "%Y-%m-%dT%H:%M:%S", &tm_utc);
+        std::strftime(buf_version, sizeof(buf_version), "%Y%m%d%H%M%S", &tm_utc);
         std::string current_date = buf_version;
         std::string version;
         if(!epoch.empty()) {
