@@ -45,7 +45,7 @@ install(TARGETS lubuntuci
 )
 
 install(TARGETS build-packages fetch-indexes update-maintainer
-    RUNTIME DESTINATION bin
+    RUNTIME DESTINATION .
 )
 
 install(FILES common.h update-maintainer-lib.h utilities.h
