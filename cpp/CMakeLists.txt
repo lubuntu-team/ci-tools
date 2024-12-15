@@ -17,21 +17,12 @@ pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 find_package(CURL REQUIRED)
 find_package(ZLIB REQUIRED)
 
-# Locate Launchpadlib
-# Assuming Launchpadlib is installed in /srv/lubuntu-ci/repos/ci-tools/lib/
-# Adjust the path if necessary
-find_library(LAUNCHPADLIB_LIB NAMES launchpadlib liblaunchpad REQUIRED PATHS /srv/lubuntu-ci/repos/ci-tools/lib/ NO_DEFAULT_PATH)
-if(NOT LAUNCHPADLIB_LIB)
-    message(FATAL_ERROR "launchpadlib not found")
-endif()
-
-# Include directories for Launchpadlib
 include_directories(/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
 
 # Create the shared library liblubuntuci.so
 add_library(lubuntuci SHARED common.cpp utilities.cpp)
 target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(lubuntuci PRIVATE yaml-cpp)
+target_link_libraries(lubuntuci PRIVATE yaml-cpp /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
 # Ensure liblubuntuci has proper RPATH
 set_target_properties(lubuntuci PROPERTIES
@@ -46,13 +37,12 @@ target_link_libraries(build-packages PRIVATE lubuntuci PkgConfig::LIBGIT2 yaml-c
 # fetch-indexes executable
 add_executable(fetch-indexes fetch-indexes.cpp utilities.cpp)
 target_include_directories(fetch-indexes PRIVATE ${CURL_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIRS} /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl ZLIB::ZLIB yaml-cpp ${LAUNCHPADLIB_LIB})
+target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl ZLIB::ZLIB yaml-cpp)
 
 # update-maintainer executable
 add_executable(update-maintainer update-maintainer.cpp)
-# Link only necessary libraries, avoiding liblubuntuci
 target_include_directories(update-maintainer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(update-maintainer PRIVATE yaml-cpp ${LAUNCHPADLIB_LIB})
+target_link_libraries(update-maintainer PRIVATE yaml-cpp)
 
 # Ensure executables have proper RPATH
 set_target_properties(build-packages fetch-indexes update-maintainer PROPERTIES
