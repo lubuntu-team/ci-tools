@@ -60,6 +60,11 @@ static std::mutex& get_repo_mutex(const fs::path& repo_path) {
     return repo_mutexes[repo_path];
 }
 
+// Mutex and vector to store dput futures
+static std::mutex dput_futures_mutex;
+static std::vector<std::future<void>> dput_futures;
+
+// Define other constants
 static const std::string BASE_DIR = "/srv/lubuntu-ci/repos";
 static const std::string DEBFULLNAME = "Lugito";
 static const std::string DEBEMAIL = "info@lubuntu.me";
@@ -658,16 +663,23 @@ static void process_package(const YAML::Node &pkg, const YAML::Node &releases) {
         // Release the semaphore before launching dput
         semaphore.release();
 
-        // Handle dput upload asynchronously
+        // Handle dput upload asynchronously and store the future
         if(!changes_files.empty() && !upload_target.empty()) {
             std::vector<std::string> dput_changes = changes_files;
             std::vector<std::string> dput_devel_changes = devel_changes_files;
-            std::async(std::launch::async, [name, upload_target, dput_changes, dput_devel_changes]() {
+            auto fut = std::async(std::launch::async, [name, upload_target, dput_changes, dput_devel_changes]() {
                 dput_source(name, upload_target, dput_changes, dput_devel_changes);
             });
+            {
+                std::lock_guard<std::mutex> lock(dput_futures_mutex);
+                dput_futures.emplace_back(std::move(fut));
+            }
         } else {
             log_warning("No changes files to upload for package: " + name);
         }
+    } catch(...) {
+        semaphore.release();
+        throw;
     }
 }
 
@@ -791,6 +803,19 @@ int main(int argc, char** argv) {
             log_info("Package processed successfully.");
         } catch(std::exception &e) {
             log_error(std::string("Task generated an exception: ") + e.what());
+        }
+    }
+
+    // Wait for all dput uploads to complete
+    {
+        std::lock_guard<std::mutex> lock(dput_futures_mutex);
+        for(auto &fut : dput_futures) {
+            try {
+                fut.get();
+                log_info("Dput upload completed successfully.");
+            } catch(std::exception &e) {
+                log_error(std::string("Dput upload generated an exception: ") + e.what());
+            }
         }
     }
 
