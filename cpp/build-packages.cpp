@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
         std::tm tm_utc;
         gmtime_r(&t, &tm_utc);
         char buf_version[20];
-        std::strftime(buf_version, sizeof(buf_version), "%Y%m%d%H%M%S", &tm_utc);
+        std::strftime(buf_version, sizeof(buf_version), "%Y%m%d%H%M", &tm_utc);
         std::string current_date = buf_version;
         std::string version;
         if(!epoch.empty()) {
