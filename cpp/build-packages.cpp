@@ -35,6 +35,7 @@
 #include <iterator>
 #include <yaml-cpp/yaml.h>
 #include <ctime>
+#include <numeric>
 
 #include <git2.h>
 
