@@ -649,13 +649,94 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         }
     }
 
-    std::cout << "Run the grim reaper..." << std::endl;
-    std::string grimCmd = "./grim-reaper " + RELEASE;
-    int grimResult = executeAndLog(grimCmd);
-    if (grimResult != 0) {
-        std::cerr << "Error: Grim reaper execution failed for release " << RELEASE << std::endl;
+    // Now inline what was previously the Python "grim-reaper" script.
+    std::cout << "Run the grim reaper (integrated)..." << std::endl;
+
+    // We assume we already have global_lp, series, etc.
+    if (!global_lp_opt.has_value()) {
+        auto lp_opt = launchpad::login();
+        if (!lp_opt.has_value()) {
+            std::cerr << "Failed to authenticate with Launchpad during grim-reaper stage.\n";
+            return;
+        }
+        global_lp_opt = lp_opt;
+        global_lp = global_lp_opt.value().get();
+    }
+
+    auto lp = global_lp;
+    auto ubuntu_opt = lp->distributions["ubuntu"];
+    if (!ubuntu_opt.has_value()) {
+        std::cerr << "Failed to retrieve ubuntu (grim-reaper stage).\n";
         return;
     }
+    distribution ubuntu = ubuntu_opt.value();
+
+    auto lubuntu_ci_opt = lp->people["lubuntu-ci"];
+    if (!lubuntu_ci_opt.has_value()) {
+        std::cerr << "Failed to retrieve lubuntu-ci (grim-reaper stage).\n";
+        return;
+    }
+    person lubuntu_ci = lubuntu_ci_opt.value();
+
+    auto regular_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci");
+    if (!regular_opt.has_value()) {
+        std::cerr << "Failed to retrieve regular PPA (grim-reaper stage).\n";
+        return;
+    }
+    archive regular = regular_opt.value();
+
+    auto proposed_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci-proposed");
+    if (!proposed_opt.has_value()) {
+        std::cerr << "Failed to retrieve proposed PPA (grim-reaper stage).\n";
+        return;
+    }
+    archive proposed = proposed_opt.value();
+
+    auto series_opt = ubuntu.getSeries(RELEASE);
+    if (!series_opt.has_value()) {
+        std::cerr << "Failed to retrieve series for: " << RELEASE << " (grim-reaper stage)\n";
+        return;
+    }
+    distro_series series = series_opt.value();
+
+    std::cout << "IS THAT THE GRIM REAPER?!?!?!?!!!" << std::endl;
+
+    // Fetch superseded packages
+    auto proposed_superseded_gen = proposed.getPublishedSources("", "", series, false, false, "", "", "Superseded", "");
+    std::vector<source_package_publishing_history> proposed_superseded;
+    for (auto s : proposed_superseded_gen) proposed_superseded.push_back(s);
+
+    auto regular_superseded_gen = regular.getPublishedSources("", "", series, false, false, "", "", "Superseded", "");
+    std::vector<source_package_publishing_history> regular_superseded;
+    for (auto s : regular_superseded_gen) regular_superseded.push_back(s);
+
+    int total_removals = (int)proposed_superseded.size() + (int)regular_superseded.size();
+    std::cout << "Total packages to remove: " << total_removals << std::endl;
+
+    int current_package = 1;
+    int current_percentage = 0;
+
+    auto process_removals = [&](std::vector<source_package_publishing_history>& pkgs) {
+        for (auto &pkg : pkgs) {
+            for (auto build : pkg.getBuilds()) {
+                if (build.buildstate == "Currently building" || build.buildstate == "Needs building") {
+                    if (build.can_be_cancelled) {
+                        build.cancel();
+                    }
+                }
+            }
+            pkg.requestDeletion("superseded");
+            int new_percentage = (current_package * 100) / total_removals;
+            if (new_percentage > current_percentage) {
+                current_percentage = new_percentage;
+                std::cout << current_percentage << "% complete (" << current_package << "/" << total_removals << ")" << std::endl;
+            }
+            current_package++;
+        }
+    };
+
+    process_removals(proposed_superseded);
+    process_removals(regular_superseded);
 
     std::cout << "Done processing release " << RELEASE << "." << std::endl;
 }
