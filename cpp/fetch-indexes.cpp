@@ -17,10 +17,12 @@
 
 #include "launchpad.h"
 #include "archive.h"
+#include "distro_series.h"
 #include "build.h"
 #include "distribution.h"
 #include "person.h"
 #include "source_package_publishing_history.h"
+#include "binary_package_publishing_history.h"
 
 #include <iostream>
 #include <fstream>
