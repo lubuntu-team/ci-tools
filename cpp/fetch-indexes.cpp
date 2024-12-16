@@ -176,7 +176,7 @@ int check_pending_packages(const std::string& release) {
                 for (auto build : src.getBuilds()) {
                     auto bs = build.buildstate;
                     if (bs == "Currently building") {
-                        if (build.date_started.has_value() && build.date_started.value() >= one_hour_ago) {
+                        if (!build.date_started.empty() && build.date_started >= one_hour_ago) {
                             total_pending += 1;
                         }
                     } else if (bs == "Needs building") {
@@ -221,14 +221,14 @@ int check_pending_packages(const std::string& release) {
             for (auto br : records_gen) records.push_back(br);
 
             for (auto &build_record : records) {
-                if (build_record.datebuilt.has_value() && build_record.datebuilt.value() < three_hours_ago) {
+                if (!build_record.datebuilt.empty() && build_record.datebuilt < three_hours_ago) {
                     source_packages.clear();
                     break;
                 }
                 check_builds.insert(build_record.title);
                 if (build_record.current_source_publication.has_value()) {
                     auto src_pub = build_record.current_source_publication.value();
-                    if (src_pub.distro_series.name_or_version == series.name_or_version) {
+                    if (src_pub.distro_series.name == series.name) {
                         bool found = false;
                         for (auto& sp : source_packages) {
                             if (sp.self_link == src_pub.self_link) {
@@ -237,7 +237,7 @@ int check_pending_packages(const std::string& release) {
                             }
                         }
                         if (!found) {
-                            source_packages.push_back(src_pub);
+                            source_packages.emplace_back(src_pub);
                         }
                     }
                 }
@@ -473,7 +473,10 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
 
     std::cout << "Building britney indexes..." << std::endl;
 
-    fs::create_directories(fs::path(BRITNEY_OUTDIR) / getCurrentTimestamp());
+    std::time_t now_c = std::time(nullptr);
+    char timestamp[20];
+    std::strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H%M%S", std::gmtime(&now_c));
+    fs::create_directories(fs::path(BRITNEY_OUTDIR) / timestamp);
 
     std::string DEST = BRITNEY_DATADIR + RELEASE + "-proposed";
     fs::create_directories(DEST);
