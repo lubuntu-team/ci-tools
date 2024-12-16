@@ -20,7 +20,7 @@
 #include "build.h"
 #include "distribution.h"
 #include "person.h"
-#include "source.h"
+#include "source_package_publishing_history.h"
 
 #include <iostream>
 #include <fstream>
@@ -176,7 +176,7 @@ int check_pending_packages(const std::string& release) {
                 for (auto build : src.getBuilds()) {
                     auto bs = build.buildstate;
                     if (bs == "Currently building") {
-                        if (build.date_started && build.date_started >= one_hour_ago) {
+                        if (build.date_started >= one_hour_ago) {
                             total_pending += 1;
                         }
                     } else if (bs == "Needs building") {
@@ -221,7 +221,7 @@ int check_pending_packages(const std::string& release) {
             for (auto br : records_gen) records.push_back(br);
 
             for (auto &build_record : records) {
-                if (build_record.datebuilt && build_record.datebuilt < three_hours_ago) {
+                if (build_record.datebuilt < three_hours_ago) {
                     source_packages.clear();
                     break;
                 }
