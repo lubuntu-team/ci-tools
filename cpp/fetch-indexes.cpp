@@ -176,7 +176,7 @@ int check_pending_packages(const std::string& release) {
                 for (auto build : src.getBuilds()) {
                     auto bs = build.buildstate;
                     if (bs == "Currently building") {
-                        if (!build.date_started.empty() && build.date_started >= one_hour_ago) {
+                        if (build.date_started && build.date_started >= one_hour_ago) {
                             total_pending += 1;
                         }
                     } else if (bs == "Needs building") {
@@ -221,14 +221,14 @@ int check_pending_packages(const std::string& release) {
             for (auto br : records_gen) records.push_back(br);
 
             for (auto &build_record : records) {
-                if (!build_record.datebuilt.empty() && build_record.datebuilt < three_hours_ago) {
+                if (build_record.datebuilt && build_record.datebuilt < three_hours_ago) {
                     source_packages.clear();
                     break;
                 }
                 check_builds.insert(build_record.title);
                 if (build_record.current_source_publication.has_value()) {
                     auto src_pub = build_record.current_source_publication.value();
-                    if (src_pub.distro_series.name == series.name) {
+                    if (src_pub.distro_series.value().name == series.name) {
                         bool found = false;
                         for (auto& sp : source_packages) {
                             if (sp.self_link == src_pub.self_link) {
