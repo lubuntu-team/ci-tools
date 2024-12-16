@@ -1,6 +1,7 @@
 __pycache__
 fetch-indexes
-fetch-indexes-cpp/build
+build-packages
+cpp/build
 britney.conf
 cache/
 data/
