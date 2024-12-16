@@ -214,7 +214,7 @@ int check_pending_packages(const std::string& release) {
             auto three_hours_ago = std::chrono::system_clock::now() - std::chrono::hours(3);
             std::set<std::string> check_builds;
             std::set<std::string> current_builds;
-            std::vector<source> source_packages;
+            std::vector<source_package_publishing_history> source_packages;
 
             auto records_gen = pocket.getBuildRecords("Successfully built");
             std::vector<build> records;
