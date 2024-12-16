@@ -218,11 +218,11 @@ int check_pending_packages(const std::string& release) {
             std::set<std::string> current_builds;
             std::vector<source_package_publishing_history> source_packages;
 
-            auto records_gen = pocket.getBuildRecords("Successfully built");
+            auto records_gen = pocket.getBuildRecords("Successfully built", "", "");
             std::vector<build> records;
-            for (auto br : records_gen) records.push_back(br);
+            for (auto br : records_gen) records.emplace_back(br);
 
-            for (auto &build_record : records) {
+            for (auto build_record : records) {
                 if (build_record.datebuilt < three_hours_ago) {
                     source_packages.clear();
                     break;
