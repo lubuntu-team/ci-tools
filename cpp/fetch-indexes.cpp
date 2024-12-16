@@ -17,6 +17,7 @@
 
 #include "launchpad.h"
 #include "archive.h"
+#include "build.h"
 #include "distribution.h"
 #include "person.h"
 #include "source.h"
