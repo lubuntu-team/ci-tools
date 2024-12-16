@@ -16,13 +16,13 @@
 #include "utilities.h"
 
 #include "launchpad.h"
-#include "archive.h"
-#include "distro_series.h"
-#include "build.h"
-#include "distribution.h"
 #include "person.h"
+#include "distribution.h"
+#include "distro_series.h"
 #include "source_package_publishing_history.h"
+#include "build.h"
 #include "binary_package_publishing_history.h"
+#include "archive.h"
 
 #include <iostream>
 #include <fstream>

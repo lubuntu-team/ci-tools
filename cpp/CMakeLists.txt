@@ -33,7 +33,7 @@ target_link_libraries(build-packages PRIVATE lubuntuci PkgConfig::LIBGIT2 update
 
 add_executable(fetch-indexes fetch-indexes.cpp utilities.cpp)
 target_include_directories(fetch-indexes PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::yaml-cpp ZLIB::ZLIB)
+target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::yaml-cpp ZLIB::ZLIB /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
 set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
