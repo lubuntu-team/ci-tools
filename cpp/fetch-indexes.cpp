@@ -245,7 +245,7 @@ int check_pending_packages(const std::string& release) {
 
             for (auto& s : source_packages) {
                 for (auto bin : s.getPublishedBinaries()) {
-                    current_builds.insert(bin.build.title);
+                    current_builds.insert(bin.build.value().title);
                 }
             }
 
