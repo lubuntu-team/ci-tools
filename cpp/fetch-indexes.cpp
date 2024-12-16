@@ -144,10 +144,10 @@ int check_pending_packages(const std::string& release) {
     std::cout << "Repositories initialized. Checking for pending sources..." << std::endl;
 
     {
-        auto reg_pending_gen = regular.getPublishedSources("Pending", series);
+        auto reg_pending_gen = regular.getPublishedSources("", "", series, false, false, "", "", "Pending", "");
         int reg_pending_count = 0;
         for (auto s : reg_pending_gen) reg_pending_count++;
-        auto prop_pending_gen = proposed.getPublishedSources("Pending", series);
+        auto prop_pending_gen = proposed.getPublishedSources("", "", series, false, false, "", "", "Pending", "");
         int prop_pending_count = 0;
         for (auto s : prop_pending_gen) prop_pending_count++;
 
@@ -168,7 +168,7 @@ int check_pending_packages(const std::string& release) {
         auto one_hour_ago = now_utc - std::chrono::hours(1);
 
         for (auto& archv : {proposed, regular}) {
-            auto published_gen = archv.getPublishedSources("Published", series);
+            auto published_gen = archv.getPublishedSources("", "", series, false, false, "", "", "Published", "");
             std::vector<source_package_publishing_history> published;
             for (auto s : published_gen) published.push_back(s);
 
@@ -217,7 +217,7 @@ int check_pending_packages(const std::string& release) {
             std::vector<source> source_packages;
 
             auto records_gen = pocket.getBuildRecords("Successfully built");
-            std::vector<build_record> records;
+            std::vector<build> records;
             for (auto br : records_gen) records.push_back(br);
 
             for (auto &build_record : records) {
