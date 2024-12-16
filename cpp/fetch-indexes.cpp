@@ -51,13 +51,13 @@ void processRelease(const std::string& release, const YAML::Node& config);
 void refresh(const std::string& url, const std::string& pocket, const std::string& britneyCache, std::mutex& logMutex);
 int executeAndLog(const std::string& command);
 
-// Global Launchpad variable, initialized once for reuse
-static std::optional<launchpad> global_lp_opt;
+// Change global_lp_opt to match login() return type
+static std::optional<std::shared_ptr<launchpad>> global_lp_opt;
 static launchpad* global_lp = nullptr;
 
 // Execute a command and stream its output to std::cout in real time
 int executeAndLog(const std::string& command) {
-    std::string fullCommand = command + " 2>&1"; // Redirect stderr to stdout
+    std::string fullCommand = command + " 2>&1";
     FILE* pipe = popen(fullCommand.c_str(), "r");
     if (!pipe) {
         std::cout << "Failed to run command: " << command << std::endl;
@@ -74,27 +74,35 @@ int executeAndLog(const std::string& command) {
     if (WIFEXITED(exitCode)) {
         return WEXITSTATUS(exitCode);
     } else {
-        return -1; // Abnormal termination
+        return -1;
     }
 }
 
-// This function replaces the Python "pending-packages" script logic.
-// Everything is done in one function, using the Launchpad C++ logic shown before.
+// Helper to count entries in a generator
+template<typename T>
+int count_generator(T gen) {
+    int c = 0;
+    for (auto _ : gen) {
+        (void)_;
+        c++;
+    }
+    return c;
+}
+
 int check_pending_packages(const std::string& release) {
-    // Ensure global_lp is initialized once globally
     if (!global_lp_opt.has_value()) {
-        global_lp_opt = launchpad::login();
-        if (!global_lp_opt.has_value()) {
+        auto lp_opt = launchpad::login();
+        if (!lp_opt.has_value()) {
             std::cerr << "Failed to authenticate with Launchpad.\n";
             return 1;
         }
-        global_lp = &global_lp_opt.value();
+        global_lp_opt = lp_opt;
+        global_lp = global_lp_opt.value().get();
     }
 
     auto lp = global_lp;
 
     std::cout << "Logging into Launchpad..." << std::endl;
-    // We already logged in globally above.
     std::cout << "Logged in. Initializing repositories..." << std::endl;
 
     auto ubuntu_opt = lp->distributions["ubuntu"];
@@ -102,67 +110,68 @@ int check_pending_packages(const std::string& release) {
         std::cerr << "Failed to retrieve ubuntu.\n";
         return 1;
     }
-    distribution ubuntu = std::move(ubuntu_opt.value());
+    distribution ubuntu = ubuntu_opt.value();
 
     auto lubuntu_ci_opt = lp->people["lubuntu-ci"];
     if (!lubuntu_ci_opt.has_value()) {
         std::cerr << "Failed to retrieve lubuntu-ci.\n";
         return 1;
     }
-    person lubuntu_ci = std::move(lubuntu_ci_opt.value());
+    person lubuntu_ci = lubuntu_ci_opt.value();
 
-    std::optional<archive> regular_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci");
+    auto regular_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci");
     if (!regular_opt.has_value()) {
         std::cerr << "Failed to retrieve regular PPA.\n";
         return 1;
     }
-    archive regular = std::move(regular_opt.value());
+    archive regular = regular_opt.value();
 
-    std::optional<archive> proposed_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci-proposed");
+    auto proposed_opt = lubuntu_ci.getPPAByName(ubuntu, "unstable-ci-proposed");
     if (!proposed_opt.has_value()) {
         std::cerr << "Failed to retrieve proposed PPA.\n";
         return 1;
     }
-    archive proposed = std::move(proposed_opt.value());
+    archive proposed = proposed_opt.value();
 
-    // We need to get the distro series for "release"
     auto series_opt = ubuntu.getSeries(release);
     if (!series_opt.has_value()) {
         std::cerr << "Failed to retrieve series for: " << release << std::endl;
         return 1;
     }
-    distro_series series = std::move(series_opt.value());
+    distro_series series = series_opt.value();
 
     std::cout << "Repositories initialized. Checking for pending sources..." << std::endl;
 
-    // Check if any sources are pending in either regular or proposed
-    int total_pending = 0;
     {
-        auto reg_pending = regular.getPublishedSources("Pending", series);
-        auto prop_pending = proposed.getPublishedSources("Pending", series);
-        total_pending = (int)reg_pending.size() + (int)prop_pending.size();
-    }
+        auto reg_pending_gen = regular.getPublishedSources("Pending", series);
+        int reg_pending_count = 0;
+        for (auto s : reg_pending_gen) reg_pending_count++;
+        auto prop_pending_gen = proposed.getPublishedSources("Pending", series);
+        int prop_pending_count = 0;
+        for (auto s : prop_pending_gen) prop_pending_count++;
 
-    bool has_pending = (total_pending != 0);
-    if (has_pending) {
-        std::cout << "Total sources pending: " << total_pending << std::endl;
-        std::cout << "Sources are still pending, not running Britney" << std::endl;
-        return 1;
+        int total_pending = reg_pending_count + prop_pending_count;
+
+        if (total_pending != 0) {
+            std::cout << "Total sources pending: " << total_pending << std::endl;
+            std::cout << "Sources are still pending, not running Britney" << std::endl;
+            return 1;
+        }
     }
 
     std::cout << "No pending sources, continuing. Checking for pending builds..." << std::endl;
-    total_pending = 0;
-    int total_retried = 0;
     {
-        using namespace std::chrono;
+        int total_pending = 0;
+        int total_retried = 0;
         auto now_utc = std::chrono::system_clock::now();
         auto one_hour_ago = now_utc - std::chrono::hours(1);
 
-        // Convert one_hour_ago to a time_point that matches the build date time usage
-        // Our build.date_started presumably returns a std::chrono::system_clock::time_point
-        auto archives = {proposed, regular};
-        for (auto& archv : archives) {
-            for (auto src : archv.getPublishedSources("Published", series)) {
+        for (auto& archv : {proposed, regular}) {
+            auto published_gen = archv.getPublishedSources("Published", series);
+            std::vector<source_package_publishing_history> published;
+            for (auto s : published_gen) published.push_back(s);
+
+            for (auto &src : published) {
                 for (auto build : src.getBuilds()) {
                     auto bs = build.buildstate;
                     if (bs == "Currently building") {
@@ -173,7 +182,6 @@ int check_pending_packages(const std::string& release) {
                         total_pending += 1;
                     } else if (bs == "Chroot problem" ||
                                (bs == "Failed to build" && build.build_log_url.empty())) {
-                        // Retry failed builds without logs
                         if (build.can_be_retried) {
                             if (build.retry()) {
                                 total_pending += 1;
@@ -184,68 +192,62 @@ int check_pending_packages(const std::string& release) {
                 }
             }
         }
-    }
 
-    if (total_retried != 0) {
-        std::cout << "Total builds retried due to builder flakiness: " << total_retried << std::endl;
-    }
+        if (total_retried != 0) {
+            std::cout << "Total builds retried due to builder flakiness: " << total_retried << std::endl;
+        }
 
-    if (total_pending != 0) {
-        std::cout << "Total builds pending: " << total_pending << std::endl;
-        std::cout << "Builds are still running, not running Britney" << std::endl;
-        return 1;
+        if (total_pending != 0) {
+            std::cout << "Total builds pending: " << total_pending << std::endl;
+            std::cout << "Builds are still running, not running Britney" << std::endl;
+            return 1;
+        }
     }
 
     std::cout << "No pending builds, continuing. Checking for pending binaries..." << std::endl;
-
-    // Check if binaries are pending
-    // This logic replicates the python code:
-    // For each of [proposed, regular], if binaries are not all published after a certain grace period,
-    // we consider them pending.
-    has_pending = false;
-
     {
-        auto archives = {proposed, regular};
-        for (auto& pocket : archives) {
-            if (has_pending) break;
+        bool has_pending = false;
 
+        for (auto& pocket : {proposed, regular}) {
+            if (has_pending) break;
             auto three_hours_ago = std::chrono::system_clock::now() - std::chrono::hours(3);
             std::set<std::string> check_builds;
             std::set<std::string> current_builds;
             std::vector<source> source_packages;
 
-            // Get successfully built records
-            for (auto build_record : pocket.getBuildRecords("Successfully built")) {
+            auto records_gen = pocket.getBuildRecords("Successfully built");
+            std::vector<build_record> records;
+            for (auto br : records_gen) records.push_back(br);
+
+            for (auto &build_record : records) {
                 if (build_record.datebuilt.has_value() && build_record.datebuilt.value() < three_hours_ago) {
-                    // If any build is older than 3 hours, the python code breaks and doesn't check
-                    // further. We'll do the same.
                     source_packages.clear();
                     break;
                 }
                 check_builds.insert(build_record.title);
-                auto src_pub = build_record.current_source_publication;
-                if (src_pub.has_value() && src_pub.value().distro_series.name_or_version == series.name_or_version) {
-                    bool found = false;
-                    for (auto& sp : source_packages) {
-                        if (sp.self_link == src_pub.value().self_link) {
-                            found = true;
-                            break;
+                if (build_record.current_source_publication.has_value()) {
+                    auto src_pub = build_record.current_source_publication.value();
+                    if (src_pub.distro_series.name_or_version == series.name_or_version) {
+                        bool found = false;
+                        for (auto& sp : source_packages) {
+                            if (sp.self_link == src_pub.self_link) {
+                                found = true;
+                                break;
+                            }
                         }
-                    }
-                    if (!found && src_pub.has_value()) {
-                        source_packages.push_back(src_pub.value());
+                        if (!found) {
+                            source_packages.push_back(src_pub);
+                        }
                     }
                 }
             }
 
-            // For each source package, get their published binaries and see if they're all in check_builds
             for (auto& s : source_packages) {
                 for (auto bin : s.getPublishedBinaries()) {
                     current_builds.insert(bin.build.title);
                 }
             }
 
-            // If check_builds does not fully cover current_builds, we have pending binaries
             for (auto& cb : current_builds) {
                 if (check_builds.find(cb) == check_builds.end()) {
                     has_pending = true;
@@ -253,11 +255,11 @@ int check_pending_packages(const std::string& release) {
                 }
             }
         }
-    }
 
-    if (has_pending) {
-        std::cout << "Binaries are still pending, not running Britney" << std::endl;
-        return 1;
+        if (has_pending) {
+            std::cout << "Binaries are still pending, not running Britney" << std::endl;
+            return 1;
+        }
     }
 
     std::cout << "All clear. Starting Britney." << std::endl;
@@ -269,7 +271,6 @@ int check_pending_packages(const std::string& release) {
 int main(int argc, char* argv[]) {
     std::string configFilePath = "config.yaml";
 
-    // Command-line argument parsing
     int opt;
     bool showHelp = false;
 
@@ -294,7 +295,6 @@ int main(int argc, char* argv[]) {
                 showHelp = true;
                 break;
             default:
-                // Unknown option
                 showHelp = true;
                 break;
         }
@@ -305,7 +305,6 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Load configuration from YAML file
     YAML::Node config;
     try {
         config = YAML::LoadFile(configFilePath);
@@ -317,11 +316,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Ensure LOG_DIR exists
     std::string LOG_DIR = config["LOG_DIR"].as<std::string>();
     fs::create_directories(LOG_DIR);
 
-    // Log rotation: Remove logs older than MAX_LOG_AGE_DAYS
     int maxLogAgeDays = config["MAX_LOG_AGE_DAYS"].as<int>();
     auto now = fs::file_time_type::clock::now();
 
@@ -335,43 +332,34 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Get the list of releases
     std::vector<std::string> releases = config["RELEASES"].as<std::vector<std::string>>();
 
-    // Process each release
     for (const auto& release : releases) {
-        // Log file named by current UTC time (YYYYMMDDTHH:MM:SS) and release
         std::time_t now_c = std::time(nullptr);
         char timestamp[20];
         std::strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H%M%S", std::gmtime(&now_c));
-        std::string logFileName = LOG_DIR + "/" + timestamp + "_" + release + ".log";
+        std::string logFileName = LOG_DIR + "/" + std::string(timestamp) + "_" + release + ".log";
 
-        // Open log file
         std::ofstream logFile(logFileName, std::ios::app);
         if (!logFile.is_open()) {
             std::cerr << "Error: Unable to open log file: " << logFileName << std::endl;
             continue;
         }
 
-        // Redirect stdout and stderr to log file
         std::streambuf* coutBuf = std::cout.rdbuf();
         std::streambuf* cerrBuf = std::cerr.rdbuf();
         std::cout.rdbuf(logFile.rdbuf());
         std::cerr.rdbuf(logFile.rdbuf());
 
-        // Log the start time
         char startTime[20];
         std::strftime(startTime, sizeof(startTime), "%Y-%m-%d %H:%M:%S", std::gmtime(&now_c));
         std::cout << startTime << " - Running Britney for " << release << std::endl;
 
-        // Process the release
         processRelease(release, config);
 
-        // Restore stdout and stderr
         std::cout.rdbuf(coutBuf);
         std::cerr.rdbuf(cerrBuf);
 
-        // Close log file
         logFile.close();
     }
 
@@ -379,7 +367,6 @@ int main(int argc, char* argv[]) {
 }
 
 void processRelease(const std::string& RELEASE, const YAML::Node& config) {
-    // Extract configuration variables
     std::string MAIN_ARCHIVE = config["MAIN_ARCHIVE"].as<std::string>();
     std::string PORTS_ARCHIVE = config["PORTS_ARCHIVE"].as<std::string>();
     std::string LP_TEAM = config["LP_TEAM"].as<std::string>();
@@ -399,7 +386,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     std::string SOURCE_PPA_URL = "https://ppa.launchpadcontent.net/" + LP_TEAM + "/" + SOURCE_PPA + "/ubuntu/dists/" + RELEASE + "/main";
     std::string DEST_PPA_URL = "https://ppa.launchpadcontent.net/" + LP_TEAM + "/" + DEST_PPA + "/ubuntu/dists/" + RELEASE + "/main";
 
-    // Instead of calling pending-packages script, we call check_pending_packages function
     int pendingResult = check_pending_packages(RELEASE);
     if (pendingResult != 0) {
         std::cerr << "Error: pending-packages (now integrated check) failed for release " << RELEASE << std::endl;
@@ -424,13 +410,14 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
                 std::string url = PORTS_ARCHIVE + pocket + "/" + component + "/binary-" + arch + "/Packages.gz";
                 threads.emplace_back(refresh, url, pocket, BRITNEY_CACHE, std::ref(logMutex));
             }
-            std::string url = MAIN_ARCHIVE + pocket + "/" + component + "/source/Sources.gz";
-            threads.emplace_back(refresh, url, pocket, BRITNEY_CACHE, std::ref(logMutex));
+            {
+                std::string url = MAIN_ARCHIVE + pocket + "/" + component + "/source/Sources.gz";
+                threads.emplace_back(refresh, url, pocket, BRITNEY_CACHE, std::ref(logMutex));
+            }
         }
     }
 
     {
-        // Treat DEST_PPA as proposed pocket
         std::string pocket = RELEASE + "-ppa-proposed";
         for (const auto& arch : ARCHES) {
             std::string url = DEST_PPA_URL + "/binary-" + arch + "/Packages.gz";
@@ -447,7 +434,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     }
 
     {
-        // SOURCE_PPA as unstable pocket
         std::string pocket = SOURCE_PPA + "-" + RELEASE;
         for (const auto& arch : ARCHES) {
             std::string url = SOURCE_PPA_URL + "/binary-" + arch + "/Packages.gz";
@@ -467,7 +453,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         th.join();
     }
 
-    // Process logs
     pid_t pid = getpid();
     std::string logPattern = std::to_string(pid) + "-wget-log";
 
@@ -497,7 +482,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     fs::remove(fs::path(DEST) / "Hints");
     fs::create_symlink(BRITNEY_HINTDIR, fs::path(DEST) / "Hints");
 
-    // Concatenate Sources from SOURCE_PPA
     {
         std::string sourcesContent;
         for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE + SOURCE_PPA + "-" + RELEASE)) {
@@ -530,7 +514,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
     }
 
-    // Process Testing
     {
         DEST = BRITNEY_DATADIR + RELEASE;
         fs::create_directories(DEST);
@@ -540,7 +523,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         fs::remove(fs::path(DEST) / "Hints");
         fs::create_symlink(BRITNEY_HINTDIR, fs::path(DEST) / "Hints");
 
-        // Concatenate Sources for RELEASE
         {
             std::string sourcesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE)) {
@@ -580,7 +562,6 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
     }
 
-    // Create britney.conf
     {
         std::string configContent = readFile(BRITNEY_CONF);
         configContent = std::regex_replace(configContent, std::regex("%\\{SERIES\\}"), RELEASE);
