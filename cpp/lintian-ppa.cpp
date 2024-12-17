@@ -15,6 +15,9 @@
 
 #include "common.h"
 #include "launchpad.h"
+#include "distribution.h"
+#include "distro_series.h"
+#include "person.h"
 
 #include <iostream>
 #include <fstream>
@@ -381,39 +384,20 @@ int main(int argc, char* argv[]) {
 
     // Authenticate with Launchpad
     log_info_custom("Logging into Launchpad...");
-    std::shared_ptr<launchpad> lp_opt = launchpad::login();
-    if (!lp_opt) {
-        log_error_custom("Failed to authenticate with Launchpad.");
+    auto lp_opt = launchpad::login();
+    if (!lp_opt.has_value()) {
+        std::cerr << "Failed to authenticate with Launchpad.\n";
         return 1;
     }
-    log_info_custom("Logged into Launchpad.");
+    auto lp = lp_opt.value().get();
 
-    launchpad lp = *lp_opt;
-
-    // Access Ubuntu distribution and current series
-    auto ubuntu_opt = lp.distributions.find("ubuntu");
-    if (ubuntu_opt == lp.distributions.end()) {
-        log_error_custom("Failed to retrieve 'ubuntu' distribution.");
-        return 1;
-    }
-    distribution ubuntu = ubuntu_opt->second;
-    distro_series current_series;
-
-    // Assuming current_series is accessible; adjust based on actual Launchpad API
-    // Here, we assume ubuntu.current_series is a valid member
-    if (ubuntu.getCurrentSeries(current_series) != 0) {
-        log_error_custom("Failed to retrieve current series.");
-        return 1;
-    }
-    log_info_custom("Current series: " + current_series.name);
+    auto ubuntu_opt = lp->distributions["ubuntu"];
+    distribution ubuntu = ubuntu_opt.value();
+    distro_series current_series = ubuntu.current_series;
 
     // Retrieve user and PPA
-    auto user_opt = lp.people.find(args.user);
-    if (user_opt == lp.people.end()) {
-        log_error_custom("Failed to retrieve user: " + args.user);
-        return 1;
-    }
-    person user = user_opt->second;
+    auto user_opt = lp->people[args.user];
+    person user = user_opt.value();
 
     auto ppa_opt = user.getPPAByName(ubuntu, args.ppa);
     if (!ppa_opt.has_value()) {
@@ -450,8 +434,6 @@ int main(int argc, char* argv[]) {
     }
     fs::create_directories(lintianDir);
     fs::create_directories(lintianTmpDir);
-
-    // Define rsync function (already implemented as rsync_copy)
 
     // Initialize ThreadPool with 5 threads
     ThreadPool pool(5);
