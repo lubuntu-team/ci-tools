@@ -12,6 +12,7 @@ find_package(yaml-cpp REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 find_package(CURL REQUIRED)
+find_library(UUID_LIB uuid)
 find_package(ZLIB REQUIRED)
 
 include_directories(/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
@@ -37,7 +38,7 @@ target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::ya
 
 add_executable(lintian-ppa lintian-ppa.cpp)
 target_include_directories(lintian-ppa PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(lintian-ppa PRIVATE lubuntuci /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
+target_link_libraries(lintian-ppa PRIVATE lubuntuci ${UUID_LIB} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
 set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer lintian-ppa PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
