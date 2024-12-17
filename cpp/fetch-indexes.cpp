@@ -228,8 +228,8 @@ int check_pending_packages(const std::string& release) {
                     break;
                 }
                 check_builds.insert(build_record.title);
-                if (build_record.current_source_publication.has_value()) {
-                    auto src_pub = build_record.current_source_publication.value();
+                if (build_record.current_source_publication) {
+                    auto src_pub = build_record.current_source_publication;
                     if (src_pub.distro_series && src_pub.distro_series->name == series.name) {
                         bool found = false;
                         for (auto& sp : source_packages) {
