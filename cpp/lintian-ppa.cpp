@@ -249,15 +249,13 @@ std::optional<std::string> run_lintian(const fs::path& changesPath) {
 // Function to process a single changes file URL
 void process_sources(const std::string& url, const fs::path& baseOutputDir, const fs::path& lintianTmpDir) {
     // Generate a unique temporary directory
-    std::string uuid_str;
-    uuid_t uuid;
-    uuid_generate(uuid, uuid_str.data());
-    uuid_str = "";
-    for(int i = 0; i < 16; ++i) {
-        char buf[3];
-        snprintf(buf, sizeof(buf), "%02x", uuid[i]);
-        uuid_str += buf;
-    }
+    uuid_t uuid_bytes;
+    uuid_generate(uuid_bytes); // Correctly call with one argument
+
+    char uuid_cstr[37]; // UUIDs are 36 characters plus null terminator
+    uuid_unparse_lower(uuid_bytes, uuid_cstr); // Convert to string
+
+    std::string uuid_str = std::string(uuid_cstr).substr(0, 8); // Extract first 8 characters
     std::string tmpdir = (baseOutputDir / ("lintian_tmp_" + uuid_str)).string();
 
     // Create temporary directory
@@ -393,7 +391,7 @@ int main(int argc, char* argv[]) {
 
     auto ubuntu_opt = lp->distributions["ubuntu"];
     distribution ubuntu = ubuntu_opt.value();
-    distro_series current_series = ubuntu.current_series;
+    distro_series current_series = ubuntu.current_series.value();
 
     // Retrieve user and PPA
     auto user_opt = lp->people[args.user];
