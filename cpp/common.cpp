@@ -129,3 +129,13 @@ void create_tarball(const std::string &name, const fs::path &source_dir, const s
     run_command(cmd, source_dir.parent_path());
     std::cout << "[INFO] Tarball created and compressed: " << tar_filename << "\n";
 }
+
+std::string get_current_utc_time() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_utc;
+    gmtime_r(&now_time, &tm_utc);
+    char buf[20];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm_utc);
+    return std::string(buf);
+}
