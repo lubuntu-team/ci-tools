@@ -230,10 +230,10 @@ int check_pending_packages(const std::string& release) {
                 check_builds.insert(build_record.title);
                 if (build_record.current_source_publication) {
                     auto src_pub = build_record.current_source_publication;
-                    if (src_pub.distro_series && src_pub.distro_series->name == series.name) {
+                    if (src_pub->distro_series && src_pub->distro_series->name == series.name) {
                         bool found = false;
                         for (auto& sp : source_packages) {
-                            if (sp.self_link == src_pub.self_link) {
+                            if (sp.self_link == src_pub->self_link) {
                                 found = true;
                                 break;
                             }
