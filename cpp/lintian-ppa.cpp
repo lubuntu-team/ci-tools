@@ -391,7 +391,8 @@ int main(int argc, char* argv[]) {
 
     auto ubuntu_opt = lp->distributions["ubuntu"];
     distribution ubuntu = ubuntu_opt.value();
-    distro_series current_series = ubuntu.current_series.value();
+    auto ds_opt = ubuntu.current_series;
+    distro_series current_series = ds_opt.value();
 
     // Retrieve user and PPA
     auto user_opt = lp->people[args.user];
