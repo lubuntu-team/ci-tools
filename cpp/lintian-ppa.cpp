@@ -14,6 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common.h"
+#include "utilities.h"
+
 #include "launchpad.h"
 #include "distribution.h"
 #include "distro_series.h"
