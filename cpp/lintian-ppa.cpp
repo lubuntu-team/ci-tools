@@ -17,6 +17,7 @@
 #include "utilities.h"
 
 #include "launchpad.h"
+#include "archive.h"
 #include "distribution.h"
 #include "distro_series.h"
 #include "person.h"
