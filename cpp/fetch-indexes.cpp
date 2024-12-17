@@ -239,7 +239,7 @@ int check_pending_packages(const std::string& release) {
                             }
                         }
                         if (!found) {
-                            source_packages.emplace_back(src_pub);
+                            source_packages.emplace_back(*src_pub);
                         }
                     }
                 }
