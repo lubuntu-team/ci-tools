@@ -35,7 +35,11 @@ add_executable(fetch-indexes fetch-indexes.cpp utilities.cpp)
 target_include_directories(fetch-indexes PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
 target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::yaml-cpp ZLIB::ZLIB /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
-set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer PROPERTIES
+add_executable(lintian-ppa lintian-ppa.cpp)
+target_include_directories(lintian-ppa PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
+target_link_libraries(lintian-ppa PRIVATE lubuntuci /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
+
+set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer lintian-ppa PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "$ORIGIN/lib"
 )
@@ -44,7 +48,7 @@ install(TARGETS lubuntuci
     LIBRARY DESTINATION lib
 )
 
-install(TARGETS build-packages fetch-indexes update-maintainer
+install(TARGETS build-packages fetch-indexes update-maintainer lintian-ppa
     RUNTIME DESTINATION .
 )
 
