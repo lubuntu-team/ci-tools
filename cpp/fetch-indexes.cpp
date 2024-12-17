@@ -179,16 +179,16 @@ int check_pending_packages(const std::string& release) {
                     auto bs = build.buildstate;
                     if (bs == "Currently building") {
                         if (build.date_started >= one_hour_ago) {
-                            total_pending += 1;
+                            total_pending++;
                         }
                     } else if (bs == "Needs building") {
-                        total_pending += 1;
+                        total_pending++;
                     } else if (bs == "Chroot problem" ||
                                (bs == "Failed to build" && build.build_log_url.empty())) {
                         if (build.can_be_retried) {
                             if (build.retry()) {
-                                total_pending += 1;
-                                total_retried += 1;
+                                total_pending++;
+                                total_retried++;
                             }
                         }
                     }
@@ -247,9 +247,12 @@ int check_pending_packages(const std::string& release) {
 
             for (auto& s : source_packages) {
                 for (auto bin : s.getPublishedBinaries()) {
-                    current_builds.insert(bin.build.value().title);
+                    if (bin.build.has_value()) {
+                        current_builds.insert(bin.build.value().title);
+                    }
                 }
             }
+
 
             for (auto& cb : current_builds) {
                 if (check_builds.find(cb) == check_builds.end()) {
