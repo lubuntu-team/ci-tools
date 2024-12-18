@@ -974,84 +974,78 @@ int main(int argc, char** argv) {
     }
 
     // Stage 2: Build all packages in parallel
-    if(!has_failures) {
-        log_info("Starting Stage 2: Building all packages.");
-        std::vector<std::future<void>> build_futures;
-        for(auto &pkg : packages) {
-            build_futures.emplace_back(std::async(std::launch::async, build_package_stage_wrapper, std::ref(pkg), releases));
-        }
+    log_info("Starting Stage 2: Building all packages.");
+    std::vector<std::future<void>> build_futures;
+    for(auto &pkg : packages) {
+        build_futures.emplace_back(std::async(std::launch::async, build_package_stage_wrapper, std::ref(pkg), releases));
+    }
 
-        for(auto &fut : build_futures) {
-            try {
-                fut.get();
-                log_info("Package built successfully.");
-            } catch(std::exception &e) {
-                log_error(std::string("Build task generated an exception: ") + e.what());
-                // Failure already recorded inside build_package_stage_wrapper
-            }
+    for(auto &fut : build_futures) {
+        try {
+            fut.get();
+            log_info("Package built successfully.");
+        } catch(std::exception &e) {
+            log_error(std::string("Build task generated an exception: ") + e.what());
+            // Failure already recorded inside build_package_stage_wrapper
         }
-        log_info("Completed Stage 2: All packages built.");
+    }
+    log_info("Completed Stage 2: All packages built.");
 
-        // Check for failures after Stage 2
-        {
-            std::lock_guard<std::mutex> lock(failures_mutex);
-            if(!failed_packages.empty()) {
-                log_error("Failures detected after Stage 2: Building packages.");
-                has_failures = true;
-            }
+    // Check for failures after Stage 2
+    {
+        std::lock_guard<std::mutex> lock(failures_mutex);
+        if(!failed_packages.empty()) {
+            log_error("Failures detected after Stage 2: Building packages.");
+            has_failures = true;
         }
     }
 
     // Stage 3: Dput upload all packages in parallel
-    if(!has_failures) {
-        log_info("Starting Stage 3: Uploading all packages with dput.");
-        std::vector<std::future<void>> upload_futures;
-        for(auto &pkg : packages) {
-            upload_futures.emplace_back(std::async(std::launch::async, upload_package_stage, std::ref(pkg), skip_dput));
-        }
+    log_info("Starting Stage 3: Uploading all packages with dput.");
+    std::vector<std::future<void>> upload_futures;
+    for(auto &pkg : packages) {
+        upload_futures.emplace_back(std::async(std::launch::async, upload_package_stage, std::ref(pkg), skip_dput));
+    }
 
-        for(auto &fut : upload_futures) {
-            try {
-                fut.get();
-                log_info("Package uploaded successfully.");
-            } catch(std::exception &e) {
-                log_error(std::string("Upload task generated an exception: ") + e.what());
-                // Failure already recorded inside upload_package_stage
-            }
+    for(auto &fut : upload_futures) {
+        try {
+            fut.get();
+            log_info("Package uploaded successfully.");
+        } catch(std::exception &e) {
+            log_error(std::string("Upload task generated an exception: ") + e.what());
+            // Failure already recorded inside upload_package_stage
         }
-        log_info("Completed Stage 3: All packages uploaded.");
+    }
+    log_info("Completed Stage 3: All packages uploaded.");
 
-        // Check for failures after Stage 3
-        {
-            std::lock_guard<std::mutex> lock(failures_mutex);
-            if(!failed_packages.empty()) {
-                log_error("Failures detected after Stage 3: Uploading packages.");
-                has_failures = true;
-            }
+    // Check for failures after Stage 3
+    {
+        std::lock_guard<std::mutex> lock(failures_mutex);
+        if(!failed_packages.empty()) {
+            log_error("Failures detected after Stage 3: Uploading packages.");
+            has_failures = true;
         }
     }
 
     // Stage 4: Run Lintian on all packages in parallel
-    if(!has_failures) {
-        log_info("Starting Stage 4: Running Lintian on all packages.");
-        std::vector<std::future<void>> lintian_futures;
-        for(auto &pkg : packages) {
-            lintian_futures.emplace_back(std::async(std::launch::async, run_lintian_stage, std::ref(pkg)));
-        }
-
-        for(auto &fut : lintian_futures) {
-            try {
-                fut.get();
-                log_info("Lintian run successfully.");
-            } catch(std::exception &e) {
-                log_error(std::string("Lintian task generated an exception: ") + e.what());
-                // Record the failure
-                std::lock_guard<std::mutex> lock_fail(failures_mutex);
-                failed_packages["Lintian"] = "Exception during Lintian run: " + std::string(e.what());
-            }
-        }
-        log_info("Completed Stage 4: All Lintian runs completed.");
+    log_info("Starting Stage 4: Running Lintian on all packages.");
+    std::vector<std::future<void>> lintian_futures;
+    for(auto &pkg : packages) {
+        lintian_futures.emplace_back(std::async(std::launch::async, run_lintian_stage, std::ref(pkg)));
     }
+
+    for(auto &fut : lintian_futures) {
+        try {
+            fut.get();
+            log_info("Lintian run successfully.");
+        } catch(std::exception &e) {
+            log_error(std::string("Lintian task generated an exception: ") + e.what());
+            // Record the failure
+            std::lock_guard<std::mutex> lock_fail(failures_mutex);
+            failed_packages["Lintian"] = "Exception during Lintian run: " + std::string(e.what());
+        }
+    }
+    log_info("Completed Stage 4: All Lintian runs completed.");
 
     // Proceed to summary and cleanup
     summary(skip_cleanup);
