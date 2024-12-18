@@ -355,7 +355,7 @@ static void publish_lintian() {
 
 static std::vector<std::string> get_exclusions(const fs::path &packaging) {
     log_verbose("Retrieving exclusions from: " + packaging.string());
-    std::vector<std::string> exclusions;
+    std::vector<std::string> exclusions = {".git"};
     fs::path cpr = packaging / "debian" / "copyright";
     if(!fs::exists(cpr)) {
         log_verbose("No copyright file found.");
@@ -644,7 +644,7 @@ static void pull_package(Package &pkg, const YAML::Node &releases) {
     auto exclusions = get_exclusions(packaging_destination);
     log_info("Creating tarball for package: " + pkg.name);
     try {
-        create_tarball(pkg.name, upstream_destination, exclusions);
+        create_tarball(pkg.name + "_MAIN.tar.gz", upstream_destination.string(), exclusions);
         log_info("Tarball created for package: " + pkg.name);
     } catch(const std::exception &e) {
         log_error("Failed to create tarball for package " + pkg.name + ": " + e.what());

@@ -14,6 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common.h"
+#include <archive.h>
+#include <archive_entry.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -112,22 +114,57 @@ void clean_old_logs(const fs::path &log_dir, int max_age_seconds) {
     }
 }
 
-void create_tarball(const std::string &name, const fs::path &source_dir, const std::vector<std::string> &exclusions) {
-    std::string tar_filename = name + "_MAIN.orig.tar.gz";
-    std::cout << "[INFO] Creating tarball: " << tar_filename << "\n";
+void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions) {
+    namespace fs = std::filesystem;
+    std::cout << "[INFO] Creating tarball: " << tarballPath << std::endl;
 
-    std::vector<std::string> cmd;
-    cmd.push_back("tar");
-    for (auto &ex : exclusions) {
-        cmd.push_back("--exclude=" + ex);
+    struct archive* a = archive_write_new();
+    struct archive_entry* entry = nullptr;
+
+    // Initialize the tarball
+    archive_write_add_filter_gzip(a);
+    archive_write_set_format_pax_restricted(a);
+    if (archive_write_open_filename(a, tarballPath.c_str()) != ARCHIVE_OK) {
+        throw std::runtime_error("Could not open tarball for writing: " + std::string(archive_error_string(a)));
     }
-    cmd.push_back("--exclude=.git/");
-    cmd.push_back("-czf");
-    cmd.push_back(tar_filename);
-    cmd.push_back(fs::path(source_dir).filename().string());
 
-    run_command(cmd, source_dir.parent_path());
-    std::cout << "[INFO] Tarball created and compressed: " << tar_filename << "\n";
+    for (const auto& file : fs::recursive_directory_iterator(directory)) {
+        const auto& path = file.path();
+        auto relativePath = fs::relative(path, directory).string();
+
+        // Check if the path matches any exclusion
+        bool excluded = std::any_of(exclusions.begin(), exclusions.end(), [&relativePath](const std::string& exclusion) {
+            return relativePath.find(exclusion) != std::string::npos;
+        });
+
+        if (excluded) {
+            continue;
+        }
+
+        if (!fs::is_directory(path)) {
+            // Add the file to the tarball
+            entry = archive_entry_new();
+            archive_entry_set_pathname(entry, relativePath.c_str());
+            archive_entry_set_size(entry, fs::file_size(path));
+            archive_entry_set_filetype(entry, AE_IFREG);
+            archive_entry_set_perm(entry, static_cast<mode_t>(fs::status(path).permissions()));
+
+            archive_write_header(a, entry);
+
+            // Write file contents
+            std::ifstream fileStream(path, std::ios::binary);
+            std::vector<char> buffer((std::istreambuf_iterator<char>(fileStream)), std::istreambuf_iterator<char>());
+            archive_write_data(a, buffer.data(), buffer.size());
+
+            archive_entry_free(entry);
+        }
+    }
+
+    // Finalize and clean up
+    archive_write_close(a);
+    archive_write_free(a);
+
+    std::cout << "[INFO] Tarball created and compressed: " << tarballPath << std::endl;
 }
 
 std::string get_current_utc_time() {
