@@ -46,8 +46,15 @@
 
 namespace fs = std::filesystem;
 
-// Limit concurrency to 5, ensuring at most 5 directories in /tmp at a time
+// Limit concurrency to 5, ensuring at most 5 processes at a time
 static std::counting_semaphore<5> semaphore(5);
+
+// Helper RAII class to manage semaphore acquisition and release
+struct semaphore_guard {
+    std::counting_semaphore<5> &sem;
+    semaphore_guard(std::counting_semaphore<5> &s) : sem(s) { sem.acquire(); }
+    ~semaphore_guard() { sem.release(); }
+};
 
 // Mutex to protect access to the repo_mutexes map
 static std::mutex repo_map_mutex;
@@ -156,6 +163,8 @@ static void print_help(const std::string &prog_name) {
 
 // Function to run a command silently and throw an exception on failure
 static void run_command_silent_on_success(const std::vector<std::string> &cmd, const std::optional<fs::path> &cwd = std::nullopt) {
+    semaphore_guard guard(semaphore);
+
     std::string command_str = std::accumulate(cmd.begin(), cmd.end(), std::string(),
         [](const std::string &a, const std::string &b) -> std::string { return a + (a.empty() ? "" : " ") + b; });
 
@@ -445,10 +454,24 @@ static void dput_source(const std::string &name, const std::string &upload_targe
                 }
             }
         } catch (...) {
-            log_error("Failed to upload changes for package: " + name);
-            // Record the failure
-            std::lock_guard<std::mutex> lock_fail(failures_mutex);
-            failed_packages[name] = "Failed to upload changes with dput.";
+            log_warning("dput to " + upload_target + " failed. Trying ssh-ppa.");
+            std::string ssh_upload_target = "ssh-" + upload_target;
+            std::vector<std::string> ssh_cmd = {"dput", ssh_upload_target};
+            for(auto &c: changes_files) ssh_cmd.push_back(c);
+            try {
+                run_command_silent_on_success(ssh_cmd, OUTPUT_DIR);
+                log_info("Successfully uploaded changes for package: " + name + " using ssh-ppa.");
+                for(auto &file: devel_changes_files) {
+                    if(!file.empty()) {
+                        run_source_lintian(name, file);
+                    }
+                }
+            } catch (...) {
+                log_error("Failed to upload changes for package: " + name + " with both dput commands.");
+                // Record the failure
+                std::lock_guard<std::mutex> lock_fail(failures_mutex);
+                failed_packages[name] = "Failed to upload changes with dput and ssh-dput.";
+            }
         }
     } else {
         log_warning("No changes files to upload for package: " + name);
@@ -486,15 +509,12 @@ static void update_changelog(const fs::path &packaging_dir, const std::string &r
 }
 
 static std::string build_package(const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large, const std::string &pkg_name) {
-    // Acquire the semaphore here so that each build only happens if there's capacity.
-    // This ensures we never have more than 5 /tmp dirs at once.
-    semaphore.acquire();
+    // Removed semaphore.acquire() to let run_command_silent_on_success handle semaphore
     log_info("Building source package for " + pkg_name);
     fs::path temp_dir;
     std::error_code ec;
 
-    // If anything fails, we still want to release the semaphore and clean up.
-    // We'll use a scope guard pattern here.
+    // If anything fails, we still want to clean up.
     auto cleanup = [&]() {
         if(!temp_dir.empty()) {
             fs::remove_all(temp_dir, ec);
@@ -504,7 +524,6 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
                 log_verbose("Removed temporary build directory: " + temp_dir.string());
             }
         }
-        semaphore.release();
     };
 
     try {
@@ -583,7 +602,7 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
     } catch(const std::exception &e) {
         cleanup();
         // Record the failure
-        std::lock_guard<std::mutex> lock(failures_mutex);
+        std::lock_guard<std::mutex> lock_fail(failures_mutex);
         failed_packages[pkg_name] = "Build failed: " + std::string(e.what());
         throw;
     }
