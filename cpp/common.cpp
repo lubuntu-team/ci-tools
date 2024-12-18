@@ -14,8 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common.h"
-#include <archive.h>
-#include <archive_entry.h>
+#include "/usr/include/archive.h"
+#include "/usr/include/archive_entry.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
