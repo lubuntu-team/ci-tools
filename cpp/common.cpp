@@ -119,13 +119,32 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
     std::cout << "[INFO] Creating tarball: " << tarballPath << std::endl;
 
     struct archive* a = archive_write_new();
+    if (!a) {
+        throw std::runtime_error("Failed to create a new archive.");
+    }
+
     struct archive_entry* entry = nullptr;
 
     // Initialize the tarball
-    archive_write_add_filter_gzip(a);
-    archive_write_set_format_pax_restricted(a);
+    if (archive_write_add_filter_gzip(a) != ARCHIVE_OK) {
+        std::string err = "Failed to add gzip filter: ";
+        err += archive_error_string(a);
+        archive_write_free(a);
+        throw std::runtime_error(err);
+    }
+
+    if (archive_write_set_format_pax_restricted(a) != ARCHIVE_OK) {
+        std::string err = "Failed to set format: ";
+        err += archive_error_string(a);
+        archive_write_free(a);
+        throw std::runtime_error(err);
+    }
+
     if (archive_write_open_filename(a, tarballPath.c_str()) != ARCHIVE_OK) {
-        throw std::runtime_error("Could not open tarball for writing: " + std::string(archive_error_string(a)));
+        std::string err = "Could not open tarball for writing: ";
+        err += archive_error_string(a);
+        archive_write_free(a);
+        throw std::runtime_error(err);
     }
 
     for (const auto& file : fs::recursive_directory_iterator(directory)) {
@@ -144,17 +163,36 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         if (!fs::is_directory(path)) {
             // Add the file to the tarball
             entry = archive_entry_new();
+            if (!entry) {
+                std::string err = "Failed to create archive entry: ";
+                err += archive_error_string(a);
+                archive_write_free(a);
+                throw std::runtime_error(err);
+            }
+
             archive_entry_set_pathname(entry, relativePath.c_str());
             archive_entry_set_size(entry, fs::file_size(path));
             archive_entry_set_filetype(entry, AE_IFREG);
             archive_entry_set_perm(entry, static_cast<mode_t>(fs::status(path).permissions()));
 
-            archive_write_header(a, entry);
+            if (archive_write_header(a, entry) != ARCHIVE_OK) {
+                std::string err = "Failed to write header: ";
+                err += archive_error_string(a);
+                archive_entry_free(entry);
+                archive_write_free(a);
+                throw std::runtime_error(err);
+            }
 
             // Write file contents
             std::ifstream fileStream(path, std::ios::binary);
             std::vector<char> buffer((std::istreambuf_iterator<char>(fileStream)), std::istreambuf_iterator<char>());
-            archive_write_data(a, buffer.data(), buffer.size());
+            if (archive_write_data(a, buffer.data(), buffer.size()) < 0) {
+                std::string err = "Failed to write data: ";
+                err += archive_error_string(a);
+                archive_entry_free(entry);
+                archive_write_free(a);
+                throw std::runtime_error(err);
+            }
 
             archive_entry_free(entry);
         }

@@ -14,12 +14,16 @@ pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 find_package(CURL REQUIRED)
 find_library(UUID_LIB uuid)
 find_package(ZLIB REQUIRED)
+
 pkg_check_modules(LIBARCHIVE REQUIRED libarchive)
+include_directories(${LIBARCHIVE_INCLUDE_DIRS})
+link_directories(${LIBARCHIVE_LIBRARY_DIRS})
+add_definitions(${LIBARCHIVE_CFLAGS_OTHER})
 
 include_directories(/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
 
 add_library(lubuntuci SHARED common.cpp utilities.cpp)
-target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${LIBARCHIVE_INCLUDE_DIRS})
+target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${LIBARCHIVE_INCLUDE_DIRS})
 target_link_libraries(lubuntuci PUBLIC yaml-cpp::yaml-cpp PRIVATE CURL::libcurl ${LIBARCHIVE_LIBRARIES} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
 
 add_library(update_maintainer_lib STATIC update-maintainer-lib.cpp)
