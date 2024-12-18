@@ -490,7 +490,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Iterate over published sources
-        auto publishedSources = ppa.getPublishedSources("Published", current_series.name);
+        auto publishedSources = ppa.getPublishedSources("Published", current_series->name);
         for (const auto& source : publishedSources) {
             for (const auto& build : source.getBuilds()) {
                 if (build.buildstate == "Successfully built") {
