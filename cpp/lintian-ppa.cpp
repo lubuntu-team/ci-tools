@@ -395,9 +395,11 @@ int main(int argc, char* argv[]) {
     auto ubuntu_opt = lp->distributions["ubuntu"];
     distribution ubuntu = ubuntu_opt.value();
     auto ds_opt = ubuntu.current_series;
-    auto current_series;
-    if (ds_opt)
-        current_series = ds_opt;
+    if (!ds_opt) {
+        std::cerr << "Failed to get current_series.\n";
+        return 1;
+    }
+    auto current_series = ds_opt;
 
     // Retrieve user and PPA
     auto user_opt = lp->people[args.user];
