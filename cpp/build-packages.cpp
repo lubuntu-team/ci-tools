@@ -610,6 +610,7 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
 }
 
 static void pull_package(Package &pkg, const YAML::Node &releases) {
+    semaphore_guard guard(semaphore);
     log_info("Pulling package: " + pkg.name);
     fs::path packaging_destination = fs::path(BASE_DIR) / pkg.name;
     fs::path upstream_destination = fs::path(BASE_DIR) / ("upstream-" + pkg.name);
