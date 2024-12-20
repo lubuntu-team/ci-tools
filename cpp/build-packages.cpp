@@ -46,16 +46,6 @@
 
 namespace fs = std::filesystem;
 
-// Limit concurrency to 5, ensuring at most 5 processes at a time
-static std::counting_semaphore<5> semaphore(5);
-
-// Helper RAII class to manage semaphore acquisition and release
-struct semaphore_guard {
-    std::counting_semaphore<5> &sem;
-    semaphore_guard(std::counting_semaphore<5> &s) : sem(s) { sem.acquire(); }
-    ~semaphore_guard() { sem.release(); }
-};
-
 // Mutex to protect access to the repo_mutexes map
 static std::mutex repo_map_mutex;
 
@@ -510,7 +500,6 @@ static void update_changelog(const fs::path &packaging_dir, const std::string &r
 }
 
 static std::string build_package(const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large, const std::string &pkg_name) {
-    // Removed semaphore.acquire() to let run_command_silent_on_success handle semaphore
     log_info("Building source package for " + pkg_name);
     fs::path temp_dir;
     std::error_code ec;

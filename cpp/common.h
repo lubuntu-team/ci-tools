@@ -18,9 +18,18 @@
 #include <vector>
 #include <filesystem>
 #include <optional>
+#include <semaphore>
 
 std::string parse_version(const std::filesystem::path &changelog_path);
 void run_command(const std::vector<std::string> &cmd, const std::optional<std::filesystem::path> &cwd = std::nullopt, bool show_output=false);
 void clean_old_logs(const std::filesystem::path &log_dir, int max_age_seconds=86400);
 void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions);
 std::string get_current_utc_time();
+
+static std::counting_semaphore<5> semaphore(5);
+struct semaphore_guard {
+    std::counting_semaphore<5> &sem;
+    semaphore_guard(std::counting_semaphore<5> &s) : sem(s) { sem.acquire(); }
+    ~semaphore_guard() { sem.release(); }
+};
+
