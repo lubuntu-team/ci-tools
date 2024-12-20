@@ -393,6 +393,7 @@ static std::vector<std::string> get_exclusions(const fs::path &packaging) {
 }
 
 static void run_source_lintian(const std::string &name, const fs::path &source_path) {
+    semaphore_guard guard(semaphore);
     log_info("Running Lintian for package: " + name);
     fs::path temp_file = fs::temp_directory_path() / ("lintian_suppress_" + name + ".txt");
     {
