@@ -644,7 +644,7 @@ static void pull_package(Package &pkg, const YAML::Node &releases) {
     auto exclusions = get_exclusions(packaging_destination);
     log_info("Creating tarball for package: " + pkg.name);
     try {
-        create_tarball(pkg.name + "_MAIN.tar.gz", upstream_destination.string(), exclusions);
+        create_tarball(pkg.name + "_MAIN.orig.tar.gz", upstream_destination.string(), exclusions);
         log_info("Tarball created for package: " + pkg.name);
     } catch(const std::exception &e) {
         log_error("Failed to create tarball for package " + pkg.name + ": " + e.what());
