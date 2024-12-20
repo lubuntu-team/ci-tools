@@ -27,7 +27,6 @@
 #include <regex>
 
 namespace fs = std::filesystem;
-std::counting_semaphore<5> semaphore(5);
 
 static void log_info(const std::string &msg) {
     std::cout << "[INFO] " << msg << "\n";
