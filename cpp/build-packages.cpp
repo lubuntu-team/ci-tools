@@ -751,12 +751,7 @@ static void upload_package_stage(Package &pkg, bool skip_dput) {
 
 static void run_lintian_stage(Package &pkg) {
     for(const auto &changes_file : pkg.changes_files) {
-        fs::path changes_path = changes_file;
-        fs::path source_path = changes_path.parent_path(); // Assuming source package is in the same directory
-        std::string source_package = changes_path.stem().string(); // Remove extension
-        fs::path source_package_path = fs::path(BASE_DIR) / source_package;
-
-        run_source_lintian(pkg.name, source_package_path);
+        run_source_lintian(pkg.name, changes_file);
     }
 }
 
@@ -1080,7 +1075,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-// Function to run Lintian (if needed elsewhere)
 static std::optional<std::string> run_lintian(const fs::path& source_path) {
     std::stringstream issues;
     fs::path temp_file = fs::temp_directory_path() / "lintian_suppress.txt";
