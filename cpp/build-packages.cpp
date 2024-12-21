@@ -200,17 +200,23 @@ static void git_init_once() {
 static void git_fetch_and_checkout(const fs::path &repo_path, const std::string &repo_url, const std::optional<std::string> &branch) {
     log_info("Fetching and checking out repository: " + repo_url + " into " + repo_path.string());
     git_init_once();
-    git_repository* repo = nullptr;
+
+    // Define unique_ptrs with lambda-based deleters for libgit2 resources
+    auto repo_deleter = [](git_repository* r) { if (r) git_repository_free(r); };
+    std::unique_ptr<git_repository, decltype(repo_deleter)> repo(nullptr, repo_deleter);
+
     bool need_clone = false;
 
     if(fs::exists(repo_path)) {
         log_verbose("Repository path exists. Attempting to open repository.");
-        int err = git_repository_open(&repo, repo_path.string().c_str());
+        git_repository* raw_repo = nullptr;
+        int err = git_repository_open(&raw_repo, repo_path.string().c_str());
         if(err < 0) {
             log_warning("Cannot open repo at " + repo_path.string() + ", recloning.");
             fs::remove_all(repo_path);
             need_clone = true;
         } else {
+            repo.reset(raw_repo);
             log_verbose("Repository opened successfully.");
         }
     } else {
@@ -218,92 +224,137 @@ static void git_fetch_and_checkout(const fs::path &repo_path, const std::string 
         need_clone = true;
     }
 
-    if(!need_clone && repo != nullptr) {
-        git_remote* remote = nullptr;
-        int err = git_remote_lookup(&remote, repo, "origin");
+    if(!need_clone && repo) {
+        // Define unique_ptr for git_remote with lambda-based deleter
+        auto remote_deleter = [](git_remote* r) { if (r) git_remote_free(r); };
+        std::unique_ptr<git_remote, decltype(remote_deleter)> remote(nullptr, remote_deleter);
+        git_remote* raw_remote = nullptr;
+        int err = git_remote_lookup(&raw_remote, repo.get(), "origin");
         if(err < 0) {
             log_warning("No origin remote found. Recloning.");
-            git_repository_free(repo);
             fs::remove_all(repo_path);
             need_clone = true;
         } else {
-            const char* url = git_remote_url(remote);
+            remote.reset(raw_remote);
+            const char* url = git_remote_url(remote.get());
             if(!url || repo_url != url) {
                 log_warning("Remote URL differs. Recloning.");
-                git_remote_free(remote);
-                git_repository_free(repo);
                 fs::remove_all(repo_path);
                 need_clone = true;
             } else {
                 log_verbose("Remote URL matches. Fetching latest changes.");
-                git_remote_free(remote);
-                git_remote* origin = nullptr;
-                git_remote_lookup(&origin, repo, "origin");
+                // Fetch
                 git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
-                git_remote_fetch(origin, nullptr, &fetch_opts, nullptr);
-                git_remote_free(origin);
+                err = git_remote_fetch(remote.get(), nullptr, &fetch_opts, nullptr);
+                if(err < 0){
+                    const git_error* e = git_error_last();
+                    log_error(std::string("Git fetch failed: ") + (e ? e->message : "unknown error"));
+                    throw std::runtime_error("Git fetch failed");
+                }
                 log_verbose("Fetch completed.");
 
                 if(branch) {
-                    git_reference* ref = nullptr;
+                    // Define unique_ptr for git_reference with lambda-based deleter
+                    auto ref_deleter = [](git_reference* r) { if (r) git_reference_free(r); };
+                    std::unique_ptr<git_reference, decltype(ref_deleter)> ref(nullptr, ref_deleter);
                     std::string fullbranch = "refs/remotes/origin/" + *branch;
-                    if(git_reference_lookup(&ref, repo, fullbranch.c_str()) == 0) {
-                        git_object* target = nullptr;
-                        git_reference_peel(&target, ref, GIT_OBJECT_COMMIT);
+                    git_reference* raw_ref = nullptr;
+                    int ref_err = git_reference_lookup(&raw_ref, repo.get(), fullbranch.c_str());
+                    if(ref_err == 0){
+                        ref.reset(raw_ref);
+
+                        // Define unique_ptr for git_object with lambda-based deleter
+                        auto target_deleter = [](git_object* o) { if (o) git_object_free(o); };
+                        std::unique_ptr<git_object, decltype(target_deleter)> target(nullptr, target_deleter);
+                        git_object* raw_target = nullptr;
+                        git_reference_peel(&raw_target, ref.get(), GIT_OBJECT_COMMIT);
+                        if(raw_target == nullptr) {
+                            const git_error* e = git_error_last();
+                            log_error(std::string("Failed to peel reference: ") + (e ? e->message : "unknown error"));
+                            throw std::runtime_error("Failed to peel reference");
+                        }
+                        target.reset(raw_target);
+
                         git_checkout_options co_opts = GIT_CHECKOUT_OPTIONS_INIT;
                         co_opts.checkout_strategy = GIT_CHECKOUT_FORCE;
-                        git_checkout_tree(repo, target, &co_opts);
-                        git_reference_free(ref);
-                        git_repository_set_head_detached(repo, git_object_id(target));
-                        git_object_free(target);
+                        int checkout_err = git_checkout_tree(repo.get(), target.get(), &co_opts);
+                        if(checkout_err != 0){
+                            const git_error* e = git_error_last();
+                            log_error(std::string("Failed to checkout tree: ") + (e ? e->message : "unknown error"));
+                            throw std::runtime_error("Git checkout failed");
+                        }
+
+                        git_repository_set_head_detached(repo.get(), git_object_id(target.get()));
                         log_info("Checked out branch: " + *branch);
                     } else {
                         log_warning("Branch " + *branch + " not found, recloning.");
-                        git_repository_free(repo);
                         fs::remove_all(repo_path);
                         need_clone = true;
                     }
                 }
-                git_repository_free(repo);
             }
         }
     }
 
     if(need_clone) {
+        // Define unique_ptr for new repository with lambda-based deleter
+        auto newrepo_deleter = [](git_repository* r) { if (r) git_repository_free(r); };
+        std::unique_ptr<git_repository, decltype(newrepo_deleter)> newrepo(nullptr, newrepo_deleter);
+
+        git_repository* raw_newrepo = nullptr;
         log_info("Cloning repository from " + repo_url + " to " + repo_path.string());
         git_clone_options clone_opts = GIT_CLONE_OPTIONS_INIT;
         git_checkout_options co_opts = GIT_CHECKOUT_OPTIONS_INIT;
         co_opts.checkout_strategy = GIT_CHECKOUT_FORCE;
         clone_opts.checkout_opts = co_opts;
-        git_repository* newrepo = nullptr;
-        int err = git_clone(&newrepo, repo_url.c_str(), repo_path.string().c_str(), &clone_opts);
+        int err = git_clone(&raw_newrepo, repo_url.c_str(), repo_path.string().c_str(), &clone_opts);
         if(err < 0) {
             const git_error* e = git_error_last();
             log_error(std::string("Git clone failed: ") + (e ? e->message : "unknown error"));
             throw std::runtime_error("Git clone failed");
         }
+        newrepo.reset(raw_newrepo);
         log_info("Repository cloned successfully.");
 
         if(branch) {
-            git_reference* ref = nullptr;
+            // Define unique_ptr for git_reference with lambda-based deleter
+            auto ref_deleter = [](git_reference* r) { if (r) git_reference_free(r); };
+            std::unique_ptr<git_reference, decltype(ref_deleter)> ref(nullptr, ref_deleter);
             std::string fullbranch = "refs/remotes/origin/" + *branch;
-            if(git_reference_lookup(&ref, newrepo, fullbranch.c_str()) == 0) {
-                git_object* target = nullptr;
-                git_reference_peel(&target, ref, GIT_OBJECT_COMMIT);
+            git_reference* raw_ref = nullptr;
+            int ref_err = git_reference_lookup(&raw_ref, newrepo.get(), fullbranch.c_str());
+            if(ref_err == 0) {
+                ref.reset(raw_ref);
+
+                // Define unique_ptr for git_object with lambda-based deleter
+                auto target_deleter = [](git_object* o) { if (o) git_object_free(o); };
+                std::unique_ptr<git_object, decltype(target_deleter)> target(nullptr, target_deleter);
+                git_object* raw_target = nullptr;
+                git_reference_peel(&raw_target, ref.get(), GIT_OBJECT_COMMIT);
+                if(raw_target == nullptr) {
+                    const git_error* e = git_error_last();
+                    log_error(std::string("Failed to peel reference after clone: ") + (e ? e->message : "unknown error"));
+                    throw std::runtime_error("Failed to peel reference after clone");
+                }
+                target.reset(raw_target);
+
                 git_checkout_options co_opts_clone = GIT_CHECKOUT_OPTIONS_INIT;
                 co_opts_clone.checkout_strategy = GIT_CHECKOUT_FORCE;
-                git_checkout_tree(newrepo, target, &co_opts_clone);
-                git_reference_free(ref);
-                git_repository_set_head_detached(newrepo, git_object_id(target));
-                git_object_free(target);
+                int checkout_err = git_checkout_tree(newrepo.get(), target.get(), &co_opts_clone);
+                if(checkout_err != 0){
+                    const git_error* e = git_error_last();
+                    log_error(std::string("Failed to checkout tree after clone: ") + (e ? e->message : "unknown error"));
+                    throw std::runtime_error("Git checkout after clone failed");
+                }
+
+                git_repository_set_head_detached(newrepo.get(), git_object_id(target.get()));
                 log_info("Checked out branch: " + *branch + " after clone.");
             } else {
                 log_warning("Git checkout of branch " + *branch + " failed after clone.");
-                git_repository_free(newrepo);
                 throw std::runtime_error("Branch checkout failed");
             }
         }
-        git_repository_free(newrepo);
+        // newrepo will be automatically freed when it goes out of scope
     }
     log_verbose("Finished fetching and checking out repository: " + repo_path.string());
 }
