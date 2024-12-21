@@ -25,6 +25,7 @@ void run_command(const std::vector<std::string> &cmd, const std::optional<std::f
 void clean_old_logs(const std::filesystem::path &log_dir, int max_age_seconds=86400);
 void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions);
 std::string get_current_utc_time();
+std::time_t to_time_t(const std::filesystem::file_time_type& ftime);
 
 static std::counting_semaphore<5> semaphore(5);
 struct semaphore_guard {

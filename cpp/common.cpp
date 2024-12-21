@@ -16,6 +16,7 @@
 #include "common.h"
 #include "/usr/include/archive.h"
 #include "/usr/include/archive_entry.h"
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -114,6 +115,7 @@ void clean_old_logs(const fs::path &log_dir, int max_age_seconds) {
     }
 }
 
+
 void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions) {
     std::cout << "[INFO] Creating tarball: " << tarballPath << std::endl;
 
@@ -174,6 +176,7 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
 
         archive_entry_set_pathname(entry, relativePath.c_str());
 
+        // Set file type, permissions, and size
         if (fs::is_regular_file(fstatus)) {
             // Regular file
             uintmax_t filesize = fs::file_size(path, ec);
@@ -207,6 +210,20 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
             archive_entry_free(entry);
             continue;
         }
+
+        // Retrieve and set the modification time
+        fs::file_time_type ftime = fs::last_write_time(path, ec);
+        std::time_t mtime;
+        if (ec) {
+            log_error("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
+            // Obtain current UTC time as fallback
+            auto now = std::chrono::system_clock::now();
+            mtime = std::chrono::system_clock::to_time_t(now);
+            log_info("Setting default mtime (current UTC time) for: " + path.string());
+        } else {
+            mtime = to_time_t(ftime);
+        }
+        archive_entry_set_mtime(entry, mtime, 0);
 
         if (archive_write_header(a, entry) != ARCHIVE_OK) {
             log_error("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a));
@@ -267,4 +284,12 @@ std::string get_current_utc_time() {
     char buf[20];
     std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm_utc);
     return std::string(buf);
+}
+
+std::time_t to_time_t(const fs::file_time_type& ftime) {
+    using namespace std::chrono;
+    // Convert to system_clock time_point
+    auto sctp = time_point_cast<system_clock::duration>(ftime - fs::file_time_type::clock::now()
+        + system_clock::now());
+    return system_clock::to_time_t(sctp);
 }
