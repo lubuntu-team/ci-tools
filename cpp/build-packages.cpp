@@ -197,21 +197,47 @@ static void git_init_once() {
     });
 }
 
-static void git_fetch_and_checkout(const fs::path &repo_path, const std::string &repo_url, const std::optional<std::string> &branch) {
+static int submodule_update_callback(git_submodule *sm, const char *name, void *payload) {
+    // We'll just update + log
+    if (!name) {
+        log_info("Processing submodule: (unknown)");
+    } else {
+        log_info("Processing submodule: " + std::string(name));
+    }
+
+    if (git_submodule_update(sm, /*init=*/1, /*opts=*/nullptr) != 0) {
+        const git_error *e = git_error_last();
+        std::string err_msg = (e && e->message) ? e->message : "unknown error";
+        log_error("Failed to update submodule " + std::string(name ? name : "unknown") + ": " + err_msg);
+        // Return a non-zero error so git_submodule_foreach() can short-circuit
+        return -1;
+    }
+    return 0;
+}
+
+static void update_submodules_for_repo(git_repository* repo_ptr, const std::string& repo_label) {
+    log_info("Updating submodules for repository: " + repo_label);
+    if (git_submodule_foreach(repo_ptr, submodule_update_callback, nullptr) == 0) {
+        log_info("Submodules processed successfully.");
+    } else {
+        log_warning("One or more submodules failed to update.");
+    }
+}
+
+static void git_fetch_and_checkout(const fs::path& repo_path, const std::string& repo_url, const std::optional<std::string>& branch) {
     log_info("Fetching and checking out repository: " + repo_url + " into " + repo_path.string());
     git_init_once();
 
-    // Define unique_ptrs with lambda-based deleters for libgit2 resources
     auto repo_deleter = [](git_repository* r) { if (r) git_repository_free(r); };
     std::unique_ptr<git_repository, decltype(repo_deleter)> repo(nullptr, repo_deleter);
 
     bool need_clone = false;
 
-    if(fs::exists(repo_path)) {
+    if (fs::exists(repo_path)) {
         log_verbose("Repository path exists. Attempting to open repository.");
         git_repository* raw_repo = nullptr;
         int err = git_repository_open(&raw_repo, repo_path.string().c_str());
-        if(err < 0) {
+        if (err < 0) {
             log_warning("Cannot open repo at " + repo_path.string() + ", recloning.");
             fs::remove_all(repo_path);
             need_clone = true;
@@ -224,139 +250,85 @@ static void git_fetch_and_checkout(const fs::path &repo_path, const std::string 
         need_clone = true;
     }
 
-    if(!need_clone && repo) {
-        // Define unique_ptr for git_remote with lambda-based deleter
-        auto remote_deleter = [](git_remote* r) { if (r) git_remote_free(r); };
-        std::unique_ptr<git_remote, decltype(remote_deleter)> remote(nullptr, remote_deleter);
-        git_remote* raw_remote = nullptr;
-        int err = git_remote_lookup(&raw_remote, repo.get(), "origin");
-        if(err < 0) {
-            log_warning("No origin remote found. Recloning.");
-            fs::remove_all(repo_path);
-            need_clone = true;
-        } else {
-            remote.reset(raw_remote);
-            const char* url = git_remote_url(remote.get());
-            if(!url || repo_url != url) {
-                log_warning("Remote URL differs. Recloning.");
-                fs::remove_all(repo_path);
-                need_clone = true;
-            } else {
-                log_verbose("Remote URL matches. Fetching latest changes.");
-                // Fetch
-                git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
-                err = git_remote_fetch(remote.get(), nullptr, &fetch_opts, nullptr);
-                if(err < 0){
-                    const git_error* e = git_error_last();
-                    log_error(std::string("Git fetch failed: ") + (e ? e->message : "unknown error"));
-                    throw std::runtime_error("Git fetch failed");
-                }
-                log_verbose("Fetch completed.");
-
-                if(branch) {
-                    // Define unique_ptr for git_reference with lambda-based deleter
-                    auto ref_deleter = [](git_reference* r) { if (r) git_reference_free(r); };
-                    std::unique_ptr<git_reference, decltype(ref_deleter)> ref(nullptr, ref_deleter);
-                    std::string fullbranch = "refs/remotes/origin/" + *branch;
-                    git_reference* raw_ref = nullptr;
-                    int ref_err = git_reference_lookup(&raw_ref, repo.get(), fullbranch.c_str());
-                    if(ref_err == 0){
-                        ref.reset(raw_ref);
-
-                        // Define unique_ptr for git_object with lambda-based deleter
-                        auto target_deleter = [](git_object* o) { if (o) git_object_free(o); };
-                        std::unique_ptr<git_object, decltype(target_deleter)> target(nullptr, target_deleter);
-                        git_object* raw_target = nullptr;
-                        git_reference_peel(&raw_target, ref.get(), GIT_OBJECT_COMMIT);
-                        if(raw_target == nullptr) {
-                            const git_error* e = git_error_last();
-                            log_error(std::string("Failed to peel reference: ") + (e ? e->message : "unknown error"));
-                            throw std::runtime_error("Failed to peel reference");
-                        }
-                        target.reset(raw_target);
-
-                        git_checkout_options co_opts = GIT_CHECKOUT_OPTIONS_INIT;
-                        co_opts.checkout_strategy = GIT_CHECKOUT_FORCE;
-                        int checkout_err = git_checkout_tree(repo.get(), target.get(), &co_opts);
-                        if(checkout_err != 0){
-                            const git_error* e = git_error_last();
-                            log_error(std::string("Failed to checkout tree: ") + (e ? e->message : "unknown error"));
-                            throw std::runtime_error("Git checkout failed");
-                        }
-
-                        git_repository_set_head_detached(repo.get(), git_object_id(target.get()));
-                        log_info("Checked out branch: " + *branch);
-                    } else {
-                        log_warning("Branch " + *branch + " not found, recloning.");
-                        fs::remove_all(repo_path);
-                        need_clone = true;
-                    }
-                }
-            }
-        }
-    }
-
-    if(need_clone) {
-        // Define unique_ptr for new repository with lambda-based deleter
-        auto newrepo_deleter = [](git_repository* r) { if (r) git_repository_free(r); };
-        std::unique_ptr<git_repository, decltype(newrepo_deleter)> newrepo(nullptr, newrepo_deleter);
-
-        git_repository* raw_newrepo = nullptr;
+    if (need_clone) {
         log_info("Cloning repository from " + repo_url + " to " + repo_path.string());
+        git_repository* raw_newrepo = nullptr;
         git_clone_options clone_opts = GIT_CLONE_OPTIONS_INIT;
         git_checkout_options co_opts = GIT_CHECKOUT_OPTIONS_INIT;
         co_opts.checkout_strategy = GIT_CHECKOUT_FORCE;
         clone_opts.checkout_opts = co_opts;
-        int err = git_clone(&raw_newrepo, repo_url.c_str(), repo_path.string().c_str(), &clone_opts);
-        if(err < 0) {
+        clone_opts.fetch_opts = GIT_FETCH_OPTIONS_INIT;
+
+        if (git_clone(&raw_newrepo, repo_url.c_str(), repo_path.string().c_str(), &clone_opts) != 0) {
             const git_error* e = git_error_last();
             log_error(std::string("Git clone failed: ") + (e ? e->message : "unknown error"));
             throw std::runtime_error("Git clone failed");
         }
-        newrepo.reset(raw_newrepo);
+        repo.reset(raw_newrepo);
         log_info("Repository cloned successfully.");
 
-        if(branch) {
-            // Define unique_ptr for git_reference with lambda-based deleter
-            auto ref_deleter = [](git_reference* r) { if (r) git_reference_free(r); };
-            std::unique_ptr<git_reference, decltype(ref_deleter)> ref(nullptr, ref_deleter);
+        // Checkout branch if specified
+        if (branch) {
             std::string fullbranch = "refs/remotes/origin/" + *branch;
-            git_reference* raw_ref = nullptr;
-            int ref_err = git_reference_lookup(&raw_ref, newrepo.get(), fullbranch.c_str());
-            if(ref_err == 0) {
-                ref.reset(raw_ref);
-
-                // Define unique_ptr for git_object with lambda-based deleter
-                auto target_deleter = [](git_object* o) { if (o) git_object_free(o); };
-                std::unique_ptr<git_object, decltype(target_deleter)> target(nullptr, target_deleter);
-                git_object* raw_target = nullptr;
-                git_reference_peel(&raw_target, ref.get(), GIT_OBJECT_COMMIT);
-                if(raw_target == nullptr) {
+            git_object* target = nullptr;
+            if (git_revparse_single(&target, repo.get(), fullbranch.c_str()) == 0) {
+                git_checkout_options co_opts2 = GIT_CHECKOUT_OPTIONS_INIT;
+                co_opts2.checkout_strategy = GIT_CHECKOUT_FORCE;
+                if (git_checkout_tree(repo.get(), target, &co_opts2) != 0) {
                     const git_error* e = git_error_last();
-                    log_error(std::string("Failed to peel reference after clone: ") + (e ? e->message : "unknown error"));
-                    throw std::runtime_error("Failed to peel reference after clone");
+                    log_error(std::string("Git checkout failed: ") + (e ? e->message : "unknown error"));
+                    git_object_free(target);
+                    throw std::runtime_error("Git checkout failed");
                 }
-                target.reset(raw_target);
-
-                git_checkout_options co_opts_clone = GIT_CHECKOUT_OPTIONS_INIT;
-                co_opts_clone.checkout_strategy = GIT_CHECKOUT_FORCE;
-                int checkout_err = git_checkout_tree(newrepo.get(), target.get(), &co_opts_clone);
-                if(checkout_err != 0){
-                    const git_error* e = git_error_last();
-                    log_error(std::string("Failed to checkout tree after clone: ") + (e ? e->message : "unknown error"));
-                    throw std::runtime_error("Git checkout after clone failed");
-                }
-
-                git_repository_set_head_detached(newrepo.get(), git_object_id(target.get()));
-                log_info("Checked out branch: " + *branch + " after clone.");
+                git_repository_set_head(repo.get(), fullbranch.c_str());
+                git_object_free(target);
+                log_info("Checked out branch: " + *branch);
             } else {
-                log_warning("Git checkout of branch " + *branch + " failed after clone.");
-                throw std::runtime_error("Branch checkout failed");
+                log_warning("Branch " + *branch + " not found.");
             }
         }
-        // newrepo will be automatically freed when it goes out of scope
+
+        // Initialize and update submodules
+        log_info("Initializing and updating submodules for cloned repository.");
+        update_submodules_for_repo(repo.get(), repo_path.string());
+
+    } else if (repo) {
+        // Remote validation and fetch
+        log_verbose("Validating remote origin.");
+        auto remote_deleter = [](git_remote* r) { if (r) git_remote_free(r); };
+        std::unique_ptr<git_remote, decltype(remote_deleter)> remote(nullptr, remote_deleter);
+        git_remote* raw_remote = nullptr;
+
+        int err = git_remote_lookup(&raw_remote, repo.get(), "origin");
+        if (err < 0) {
+            log_warning("No origin remote found. Recloning.");
+            fs::remove_all(repo_path);
+            throw std::runtime_error("No origin remote found.");
+        }
+        remote.reset(raw_remote);
+        const char* url = git_remote_url(remote.get());
+        if (!url || repo_url != url) {
+            log_warning("Remote URL differs. Recloning.");
+            fs::remove_all(repo_path);
+            throw std::runtime_error("Remote URL mismatch.");
+        }
+
+        // Fetch changes
+        log_verbose("Fetching latest changes.");
+        git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+        if (git_remote_fetch(remote.get(), nullptr, &fetch_opts, nullptr) != 0) {
+            const git_error* e = git_error_last();
+            log_error(std::string("Git fetch failed: ") + (e ? e->message : "unknown error"));
+            throw std::runtime_error("Git fetch failed");
+        }
+
+        log_verbose("Fetch completed.");
+
+        // Update submodules after fetch
+        log_info("Updating submodules after fetching.");
+        update_submodules_for_repo(repo.get(), repo_path.string());
     }
-    log_verbose("Finished fetching and checking out repository: " + repo_path.string());
+    log_verbose("Completed fetch and checkout for: " + repo_path.string());
 }
 
 static YAML::Node load_config(const fs::path &config_path) {
@@ -479,7 +451,9 @@ static void run_source_lintian(const std::string &name, const fs::path &source_p
 }
 
 // Function to upload changes with dput
-static void dput_source(const std::string &name, const std::string &upload_target, const std::vector<std::string> &changes_files, const std::vector<std::string> &devel_changes_files) {
+static void dput_source(const std::string &name, const std::string &upload_target,
+                        const std::vector<std::string> &changes_files,
+                        const std::vector<std::string> &devel_changes_files) {
     log_info("Uploading changes for package: " + name + " to " + upload_target);
     if(!changes_files.empty()) {
         std::string hr_changes;
@@ -535,8 +509,8 @@ static void update_changelog(const fs::path &packaging_dir, const std::string &r
         throw;
     }
     std::vector<std::string> cmd = {
-        "dch", "--distribution", release, "--package", name, "--newversion", version_with_epoch + "-0ubuntu1~ppa1",
-        "--urgency", urgency_level_override, "CI upload."
+        "dch", "--distribution", release, "--package", name, "--newversion",
+        version_with_epoch + "-0ubuntu1~ppa1", "--urgency", urgency_level_override, "CI upload."
     };
     try {
         run_command_silent_on_success(cmd, packaging_dir);
@@ -550,7 +524,9 @@ static void update_changelog(const fs::path &packaging_dir, const std::string &r
     }
 }
 
-static std::string build_package(const fs::path &packaging_dir, const std::map<std::string, std::string> &env_vars, bool large, const std::string &pkg_name) {
+static std::string build_package(const fs::path &packaging_dir,
+                                 const std::map<std::string, std::string> &env_vars,
+                                 bool large, const std::string &pkg_name) {
     log_info("Building source package for " + pkg_name);
     fs::path temp_dir;
     std::error_code ec;
@@ -560,7 +536,8 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
         if(!temp_dir.empty()) {
             fs::remove_all(temp_dir, ec);
             if(ec) {
-                log_warning("Failed to remove temporary directory: " + temp_dir.string() + " Error: " + ec.message());
+                log_warning("Failed to remove temporary directory: " + temp_dir.string() +
+                            " Error: " + ec.message());
             } else {
                 log_verbose("Removed temporary build directory: " + temp_dir.string());
             }
@@ -580,7 +557,8 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
         fs::path temp_packaging_dir = temp_dir / pkg_name;
         fs::create_directories(temp_packaging_dir, ec);
         if(ec) {
-            log_error("Failed to create temporary packaging directory: " + temp_packaging_dir.string() + " Error: " + ec.message());
+            log_error("Failed to create temporary packaging directory: " + temp_packaging_dir.string() +
+                      " Error: " + ec.message());
             throw std::runtime_error("Temporary packaging directory creation failed");
         }
 
@@ -625,7 +603,10 @@ static std::string build_package(const fs::path &packaging_dir, const std::map<s
 
         for(auto &entry : fs::directory_iterator(OUTPUT_DIR)) {
             std::string fname = entry.path().filename().string();
-            if(fname.rfind(pkg_name + "_" + env_vars.at("VERSION"), 0) == 0 && fname.size() >= 16 && fname.substr(fname.size() - 15) == "_source.changes") {
+            // e.g. package_1.2.3_source.changes
+            if(fname.rfind(pkg_name + "_" + env_vars.at("VERSION"), 0) == 0
+               && fname.size() >= 16
+               && fname.substr(fname.size() - 15) == "_source.changes") {
                 changes_file = entry.path().string();
                 log_info("Found changes file: " + changes_file);
             }
@@ -734,7 +715,8 @@ static void build_package_stage(Package &pkg, const YAML::Node &releases) {
         log_info("Building " + pkg.name + " for release: " + release);
 
         std::string release_version_no_epoch = version_no_epoch + "~" + release;
-        std::string version_for_dch = epoch.empty() ? release_version_no_epoch : (epoch + ":" + release_version_no_epoch);
+        std::string version_for_dch = epoch.empty() ? release_version_no_epoch
+                                                   : (epoch + ":" + release_version_no_epoch);
         env_map["UPLOAD_TARGET"] = pkg.upload_target;
 
         try {
