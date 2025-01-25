@@ -135,7 +135,6 @@ target_link_libraries(web_ui
 #
 # Copy templates
 #
-file(COPY ../templates
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-file(COPY ../static
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+install(TARGETS web_ui build-packages fetch-indexes update-maintainer lintian-ppa
+    RUNTIME DESTINATION .
+)
