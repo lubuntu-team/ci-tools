@@ -1227,7 +1227,7 @@ std::set<std::shared_ptr<Task>> Task::get_completed_tasks(QSqlDatabase& p_db, st
 }
 
 void Task::save(QSqlDatabase& p_db, int _packageconf_id) {
-    task_succeeded = false;
+    bool task_succeeded = false;
     while (!task_succeeded) {
         QSqlQuery query(p_db);
         query.prepare("UPDATE task SET jobstatus_id = ?, queue_time = ?, start_time = ?, finish_time = ?, successful = ?, log = ? WHERE id = ?");
