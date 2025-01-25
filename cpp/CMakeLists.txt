@@ -133,9 +133,9 @@ target_link_libraries(web_ui
     ${UUID_LIB}
 )
 
-#
-# Copy templates
-#
+install(TARGETS lubuntuci_lib
+    LIBRARY DESTINATION lib
+)
 install(TARGETS web_ui fetch-indexes update-maintainer lintian-ppa
     RUNTIME DESTINATION .
 )
