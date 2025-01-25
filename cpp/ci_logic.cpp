@@ -321,13 +321,11 @@ bool CiLogic::init_database(const QString& connectionName, const QString& databa
     // Apply PRAGMAs
     QSqlQuery pragmaQuery(baseDb);
     pragmaQuery.exec("PRAGMA journal_mode = WAL;");
-    pragmaQuery.exec("PRAGMA synchronous = FULL;");
+    pragmaQuery.exec("PRAGMA synchronous = NORMAL;");
     pragmaQuery.exec("PRAGMA foreign_keys = ON;");
 
     // Run the schema creation (or migration) statements
     QStringList sqlStatements = QString(R"(
-        PRAGMA foreign_keys = ON;
-
         CREATE TABLE IF NOT EXISTS person (
             id INTEGER PRIMARY KEY,
             username TEXT NOT NULL,
