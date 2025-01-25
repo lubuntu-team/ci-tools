@@ -18,9 +18,10 @@
 
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QString>
 
 QSqlDatabase get_thread_connection();
-bool ci_query_exec(QSqlQuery* query);
+bool ci_query_exec(QSqlQuery* query, const QString query_string = "");
 bool init_database(const QString& database_path);
 
 #endif // DB_COMMON_H

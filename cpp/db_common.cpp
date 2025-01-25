@@ -56,11 +56,13 @@ QSqlDatabase get_thread_connection() {
     return thread_db;
 }
 
-bool ci_query_exec(QSqlQuery* query) {
+bool ci_query_exec(QSqlQuery* query, const QString query_string) {
     bool passed = false;
     int attempt = 0;
     while (!passed) {
-        passed = query->exec();
+        if (query_string.isEmpty()) passed = query->exec();
+        else passed = query->exec(query_string);
+
         if (passed) return true;
         attempt++;
 
@@ -79,9 +81,9 @@ bool init_database(const QString& database_path) {
     // Apply PRAGMAs
     {
         QSqlQuery pragma_query(get_thread_connection());
-        pragma_query.exec("PRAGMA journal_mode = WAL;");
-        pragma_query.exec("PRAGMA synchronous = NORMAL;");
-        pragma_query.exec("PRAGMA foreign_keys = ON;");
+        ci_query_exec(&pragma_query, "PRAGMA journal_mode = WAL;");
+        ci_query_exec(&pragma_query, "PRAGMA synchronous = NORMAL;");
+        ci_query_exec(&pragma_query, "PRAGMA foreign_keys = ON;");
     }
 
     // Run the schema creation (or migration) statements
@@ -200,7 +202,7 @@ bool init_database(const QString& database_path) {
         for (const QString &statement : sql_statements) {
             QSqlQuery query(get_thread_connection());
             QString trimmed = statement.trimmed();
-            if (!trimmed.isEmpty() && !query.exec(trimmed)) {
+            if (!trimmed.isEmpty() && !ci_query_exec(&query, trimmed)) {
                 qDebug() << "Failed to execute SQL: " << trimmed
                          << "\nError: " << query.lastError().text();
                 return false;
