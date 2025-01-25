@@ -59,7 +59,7 @@ QSqlDatabase get_thread_connection() {
 bool ci_query_exec(QSqlQuery* query) {
     bool passed = false;
     int attempt = 0;
-    while (passed) {
+    while (!passed) {
         passed = query->exec();
         if (passed) return true;
         attempt++;
