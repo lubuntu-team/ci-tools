@@ -176,7 +176,7 @@ bool WebServer::start_server(quint16 port) {
     std::shared_ptr<LubuntuCI> lubuntuci = std::make_shared<LubuntuCI>();
     std::vector<std::shared_ptr<PackageConf>> all_repos = lubuntuci->list_known_repos();
     task_queue = std::make_unique<TaskQueue>(10);
-    static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
+    std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
     task_queue->start();
 
     // Load initial tokens
@@ -440,7 +440,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // Route "/"
     //////////////////////////////////////////
-    http_server_.route("/", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -560,7 +560,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull?repo=<id>
     //////////////////////////////////////////
-    http_server_.route("/pull", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -583,7 +583,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build?repo=<id>
     //////////////////////////////////////////
-    http_server_.route("/build", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -606,7 +606,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /logs?repo=foo
     //////////////////////////////////////////
-    http_server_.route("/logs", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/logs", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -647,7 +647,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-selected?repos=<ids>
     //////////////////////////////////////////
-    http_server_.route("/pull-selected", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -679,7 +679,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build-selected?repos=foo,bar,baz
     //////////////////////////////////////////
-    http_server_.route("/build-selected", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -711,7 +711,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-and-build-selected?repos=foo,bar,baz
     //////////////////////////////////////////
-    http_server_.route("/pull-and-build-selected", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-and-build-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -744,7 +744,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-all
     //////////////////////////////////////////
-    http_server_.route("/pull-all", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -759,7 +759,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build-all
     //////////////////////////////////////////
-    http_server_.route("/build-all", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -774,7 +774,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-and-build-all
     //////////////////////////////////////////
-    http_server_.route("/pull-and-build-all", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-and-build-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -790,7 +790,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // Serve static files from /static/<arg>
     //////////////////////////////////////////
-    http_server_.route("/static/<arg>", [this, lubuntuci](const QString filename) -> QHttpServerResponse {
+    http_server_.route("/static/<arg>", [this, lubuntuci, job_statuses](const QString filename) -> QHttpServerResponse {
         QString sanitized_filename = filename;
         if (filename.contains("..") || filename.contains("../")) {
             return QHttpServerResponse(QHttpServerResponder::StatusCode::BadRequest);
@@ -828,7 +828,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /graph
     //////////////////////////////////////////
-    http_server_.route("/graph", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/graph", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -876,7 +876,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /tasks
     //////////////////////////////////////////
-    http_server_.route("/tasks", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/tasks", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
