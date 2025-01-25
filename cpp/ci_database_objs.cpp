@@ -861,7 +861,7 @@ void PackageConf::sync() {
         for (auto [job_status, task] : jobstatus_task_map_) {
             if (task) {
                 auto sync_func = [this, task]() mutable {
-                    task->save(id);
+                    if (task->jobstatus != nullptr) task->save(id);
                 };
                 sync_func();
             }
