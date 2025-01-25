@@ -97,6 +97,9 @@ class CiLogic {
         std::string queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
                                        std::unique_ptr<TaskQueue>& task_queue,
                                        const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses);
+        std::string queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
+                                       std::unique_ptr<TaskQueue>& task_queue,
+                                       const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses);
 
         std::vector<Release> releases;
         std::vector<Package> packages;

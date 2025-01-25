@@ -565,19 +565,15 @@ bool WebServer::start_server(quint16 port) {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
-        // Extract data up front
         auto query = req.query();
         QString repo_string = query.queryItemValue("repo");
-        // We'll store them in normal copyable types
-        std::string repoStr = repo_string.toStdString();
 
-        // Return the concurrency
         return QtConcurrent::run([=, this]() {
             if (repo_string.isEmpty() || !repo_string.toInt(nullptr, 10)) {
                 std::string msg = "No valid repo specified.";
                 return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
             }
-            int repo = std::stoi(repoStr);
+            int repo = std::stoi(repo_string.toStdString());
 
             std::string msg = lubuntuci->cilogic.queue_pull_tarball({ lubuntuci->cilogic.get_packageconf_by_id(repo) }, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
@@ -588,40 +584,21 @@ bool WebServer::start_server(quint16 port) {
     // /build?repo=<id>
     //////////////////////////////////////////
     http_server_.route("/build", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+        {
+            QHttpServerResponse session_response = verify_session_token(req, req.headers());
+            if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
+        }
         auto query = req.query();
         QString repo_string = query.queryItemValue("repo");
-        std::string repoStr = repo_string.toStdString();
 
         return QtConcurrent::run([=, this]() {
             if (repo_string.isEmpty() || !repo_string.toInt(nullptr, 10)) {
                 std::string msg = "No valid repo specified.";
                 return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
             }
-            int repo = std::stoi(repoStr);
+            int repo = std::stoi(repo_string.toStdString());
 
-            std::shared_ptr<PackageConf> pkgconf = lubuntuci->cilogic.get_packageconf_by_id(repo);
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
-
-            task_queue->enqueue(
-                job_statuses.at("source_build"),
-                [this, lubuntuci](std::shared_ptr<Log> log) mutable {
-                    std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                    auto [build_ok, changes_files] = lubuntuci->cilogic.build_project(pkgconf, log);
-                    if (build_ok) {
-                        task_queue->enqueue(
-                            job_statuses.at("upload"),
-                            [lubuntuci, changes_files](std::shared_ptr<Log> log2) mutable {
-                                std::shared_ptr<PackageConf> pkgconf2 = log2->get_task_context()->get_parent_packageconf();
-                                bool upload_ok = lubuntuci->cilogic.upload_and_lint(pkgconf2, changes_files, false, log2);
-                                (void)upload_ok;
-                            },
-                            pkgconf
-                        );
-                    }
-                },
-                pkgconf
-            );
-            std::string msg = "Build queued";
+            std::string msg = lubuntuci->cilogic.queue_build_upload({ lubuntuci->cilogic.get_packageconf_by_id(repo) }, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -670,7 +647,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-selected?repos=<ids>
     //////////////////////////////////////////
-    http_server_.route("/pull-selected", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-selected", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -725,39 +702,8 @@ bool WebServer::start_server(quint16 port) {
                     return std::stoi(s);
                 })
             );
-            std::vector<std::shared_ptr<PackageConf>> pkgconfs = lubuntuci->cilogic.get_packageconfs_by_ids(repos);
 
-            if (repos.empty()) {
-                std::string msg = "No valid repositories specified for build: " + repos_str;
-                return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
-            }
-
-            std::string msg;
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
-
-            for (auto pkgconf : pkgconfs) {
-                task_queue->enqueue(
-                    job_statuses.at("source_build"),
-                    [this, lubuntuci](std::shared_ptr<Log> log) {
-                        std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                        auto [build_ok, changes_files] = lubuntuci->cilogic.build_project(pkgconf, log);
-                        if (build_ok) {
-                            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses2 = lubuntuci->cilogic.get_job_statuses();
-                            task_queue->enqueue(
-                                job_statuses2.at("upload"),
-                                [lubuntuci, changes_files](std::shared_ptr<Log> log2) mutable {
-                                    std::shared_ptr<PackageConf> pkgconf2 = log2->get_task_context()->get_parent_packageconf();
-                                    bool upload_ok = lubuntuci->cilogic.upload_and_lint(pkgconf2, changes_files, false, log2);
-                                    (void)upload_ok;
-                                },
-                                pkgconf
-                            );
-                        }
-                    },
-                    pkgconf
-                );
-                msg += "Build queued\n";
-            }
+            std::string msg = lubuntuci->cilogic.queue_build_upload(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -775,7 +721,7 @@ bool WebServer::start_server(quint16 port) {
 
         return QtConcurrent::run([=, this]() {
             if (repos_str.empty()) {
-                std::string msg = "<div class='text-danger'>No repositories specified for build and pull.</div>";
+                std::string msg = "<div class='text-danger'>No repositories specified for pull and build.</div>";
                 return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
             }
 
@@ -788,81 +734,9 @@ bool WebServer::start_server(quint16 port) {
                     return std::stoi(s);
                 })
             );
-            std::vector<std::shared_ptr<PackageConf>> pkgconfs = lubuntuci->cilogic.get_packageconfs_by_ids(repos);
 
-            if (repos.empty()) {
-                std::string msg = "<div class='text-danger'>No valid repositories specified for build and pull.</div>";
-                return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
-            }
-
-            std::string msg;
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
-            std::set<std::pair<std::string, std::shared_ptr<PackageConf>>> encountered;
-            for (auto pkgconf : pkgconfs) {
-                bool is_ghost_pull = true;
-                std::shared_ptr<PackageConf> first_pkgconf;
-                auto it = std::find_if(encountered.begin(), encountered.end(),
-                       [pkgconf](const std::pair<std::string, std::shared_ptr<PackageConf>>& elem) {
-                           return elem.first == pkgconf->package->name;
-                       });
-                if (it == encountered.end()) {
-                    is_ghost_pull = false;
-                    encountered.insert({pkgconf->package->name, pkgconf});
-                } else {
-                    first_pkgconf = it->second;
-                }
-
-                task_queue->enqueue(
-                    job_statuses.at("pull"),
-                    [this, lubuntuci, first_pkgconf, is_ghost_pull](std::shared_ptr<Log> log) {
-                        std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                        bool pull_ok;
-                        if (is_ghost_pull) {
-                            pull_ok = true;
-                            pkgconf->packaging_commit = first_pkgconf->packaging_commit;
-                            pkgconf->upstream_commit = first_pkgconf->upstream_commit;
-                            lubuntuci->cilogic.sync(pkgconf);
-                        } else {
-                            pull_ok = lubuntuci->cilogic.pull_project(pkgconf, log);
-                        }
-                        if (pull_ok) {
-                            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses2 = lubuntuci->cilogic.get_job_statuses();
-                            task_queue->enqueue(
-                                job_statuses2.at("tarball"),
-                                [this, lubuntuci, is_ghost_pull](std::shared_ptr<Log> log2) {
-                                    std::shared_ptr<PackageConf> pkgconf2 = log2->get_task_context()->get_parent_packageconf();
-                                    bool tarball_ok = is_ghost_pull ? true : lubuntuci->cilogic.create_project_tarball(pkgconf2, log2);
-                                    if (tarball_ok) {
-                                        static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses3 = lubuntuci->cilogic.get_job_statuses();
-                                        task_queue->enqueue(
-                                            job_statuses3.at("source_build"),
-                                            [this, lubuntuci](std::shared_ptr<Log> log3) {
-                                                std::shared_ptr<PackageConf> pkgconf3 = log3->get_task_context()->get_parent_packageconf();
-                                                auto [build_ok, changes_files] = lubuntuci->cilogic.build_project(pkgconf3, log3);
-                                                if (build_ok) {
-                                                    static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses4 = lubuntuci->cilogic.get_job_statuses();
-                                                    task_queue->enqueue(
-                                                        job_statuses4.at("upload"),
-                                                        [lubuntuci, changes_files](std::shared_ptr<Log> log4) mutable {
-                                                            std::shared_ptr<PackageConf> pkgconf4 = log4->get_task_context()->get_parent_packageconf();
-                                                            bool upload_ok = lubuntuci->cilogic.upload_and_lint(pkgconf4, changes_files, false, log4);
-                                                            (void)upload_ok;
-                                                        },
-                                                        pkgconf3
-                                                    );
-                                                }
-                                            },
-                                            pkgconf2
-                                        );
-                                    }
-                                },
-                                pkgconf
-                            );
-                        }
-                    },
-                    pkgconf
-                );
-            }
+            std::string msg = lubuntuci->cilogic.queue_pull_tarball(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
+            msg += lubuntuci->cilogic.queue_build_upload(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -885,39 +759,14 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build-all
     //////////////////////////////////////////
-    http_server_.route("/build-all", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build-all", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
-            auto repos = lubuntuci->list_known_repos();
-            std::string msg;
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
+            std::string msg = lubuntuci->cilogic.queue_build_upload(all_repos, task_queue, job_statuses);
 
-            for (const auto& r : repos) {
-                task_queue->enqueue(
-                    job_statuses.at("source_build"),
-                    [this, lubuntuci](std::shared_ptr<Log> log) {
-                        std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                        auto [build_ok, changes_files] = lubuntuci->cilogic.build_project(pkgconf, log);
-                        if (build_ok) {
-                            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses2 = lubuntuci->cilogic.get_job_statuses();
-                            task_queue->enqueue(
-                                job_statuses2.at("upload"),
-                                [lubuntuci, changes_files](std::shared_ptr<Log> log2) {
-                                    std::shared_ptr<PackageConf> pkgconf2 = log2->get_task_context()->get_parent_packageconf();
-                                    bool upload_ok = lubuntuci->cilogic.upload_and_lint(pkgconf2, changes_files, false, log2);
-                                    (void)upload_ok;
-                                },
-                                pkgconf
-                            );
-                        }
-                    },
-                    r
-                );
-                msg += "Build for " + r->package->name + "queued\n";
-            }
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -925,92 +774,15 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-and-build-all
     //////////////////////////////////////////
-    http_server_.route("/pull-and-build-all", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-and-build-all", [this, lubuntuci, all_repos](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
-            auto repos = lubuntuci->list_known_repos();
-            std::string msg;
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
+            std::string msg = lubuntuci->cilogic.queue_pull_tarball(all_repos, task_queue, job_statuses);
+            msg += lubuntuci->cilogic.queue_build_upload(all_repos, task_queue, job_statuses);
 
-            std::set<std::pair<std::string, std::shared_ptr<PackageConf>>> encountered;
-            for (auto repo : repos) {
-                bool is_ghost_pull = true;
-                std::shared_ptr<PackageConf> first_pkgconf;
-                auto it = std::find_if(encountered.begin(), encountered.end(),
-                    [repo](const std::pair<std::string, std::shared_ptr<PackageConf>>& elem) {
-                        return elem.first == repo->package->name;
-                    }
-                );
-                if (it == encountered.end()) {
-                    is_ghost_pull = false;
-                    encountered.insert({repo->package->name, repo});
-                } else {
-                    first_pkgconf = it->second;
-                }
-
-                task_queue->enqueue(
-                    job_statuses.at("pull"),
-                    [this, repo, lubuntuci, first_pkgconf, is_ghost_pull](std::shared_ptr<Log> log) {
-                        std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                        bool pull_ok;
-                        if (is_ghost_pull) {
-                            pull_ok = true;
-                            pkgconf->packaging_commit = first_pkgconf->packaging_commit;
-                            pkgconf->upstream_commit = first_pkgconf->upstream_commit;
-                            lubuntuci->cilogic.sync(pkgconf);
-                        } else {
-                            auto packaging_commit = pkgconf->packaging_commit;
-                            auto upstream_commit = pkgconf->upstream_commit;
-                            bool _pull_ok = lubuntuci->cilogic.pull_project(pkgconf, log);
-                            if ((packaging_commit != pkgconf->packaging_commit) ||
-                                (upstream_commit != pkgconf->upstream_commit)) {
-                                pull_ok = true;
-                            } else {
-                                pull_ok = false;
-                            }
-                        }
-
-                        if (pull_ok) {
-                            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses2 = lubuntuci->cilogic.get_job_statuses();
-                            task_queue->enqueue(
-                                job_statuses2.at("tarball"),
-                                [this, repo, lubuntuci, is_ghost_pull](std::shared_ptr<Log> log2) {
-                                    std::shared_ptr<PackageConf> pkgconf2 = log2->get_task_context()->get_parent_packageconf();
-                                    bool tarball_ok = is_ghost_pull ? true : lubuntuci->cilogic.create_project_tarball(pkgconf2, log2);
-                                    if (tarball_ok) {
-                                        static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses3 = lubuntuci->cilogic.get_job_statuses();
-                                        task_queue->enqueue(
-                                            job_statuses3.at("source_build"),
-                                            [this, repo, lubuntuci](std::shared_ptr<Log> log3) {
-                                                std::shared_ptr<PackageConf> pkgconf3 = log3->get_task_context()->get_parent_packageconf();
-                                                auto [build_ok, changes_files] = lubuntuci->cilogic.build_project(pkgconf3, log3);
-                                                if (build_ok) {
-                                                    static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses4 = lubuntuci->cilogic.get_job_statuses();
-                                                    task_queue->enqueue(
-                                                        job_statuses4.at("upload"),
-                                                        [lubuntuci, changes_files](std::shared_ptr<Log> log4) {
-                                                            std::shared_ptr<PackageConf> pkgconf4 = log4->get_task_context()->get_parent_packageconf();
-                                                            bool upload_ok = lubuntuci->cilogic.upload_and_lint(pkgconf4, changes_files, false, log4);
-                                                            (void)upload_ok;
-                                                        },
-                                                        pkgconf3
-                                                    );
-                                                }
-                                            },
-                                            pkgconf2
-                                        );
-                                    }
-                                },
-                                pkgconf
-                            );
-                        }
-                    },
-                    repo
-                );
-            }
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });

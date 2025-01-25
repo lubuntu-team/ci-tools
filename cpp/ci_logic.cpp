@@ -1174,6 +1174,39 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
     return msg;
 }
 
+std::string CiLogic::queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
+                                        std::unique_ptr<TaskQueue>& task_queue,
+                                        const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses) {
+    std::string msg;
+
+    try {
+        for (auto r : repos) {
+            task_queue->enqueue(
+                job_statuses.at("source_build"),
+                [this, r, &task_queue, job_statuses](std::shared_ptr<Log> log) mutable {
+                    auto [build_ok, changes_files] = build_project(r, log);
+                    if (build_ok) {
+                        task_queue->enqueue(
+                            job_statuses.at("upload"),
+                            [this, r, changes_files](std::shared_ptr<Log> log) mutable {
+                                bool upload_ok = upload_and_lint(r, changes_files, false, log);
+                                (void)upload_ok;
+                            },
+                            r
+                        );
+                    }
+                },
+                r
+            );
+        }
+        msg = "Succeeded";
+    } catch (...) {
+        msg = "Failed";
+    }
+
+    return msg;
+}
+
 std::map<std::string, std::shared_ptr<JobStatus>> CiLogic::get_job_statuses() {
     if (!_cached_job_statuses.empty()) { return _cached_job_statuses; }
 
