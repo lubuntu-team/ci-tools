@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js"></script>
+<style>
+    /* Reset default margins and paddings */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    /* Set body and html to take full height */
+    html, body {
+        height: 100%;
+        font-family: Arial, sans-serif;
+    }
+
+    /* Container for the entire content */
+    .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        padding: 20px;
+        background-color: #f9f9f9;
+    }
+
+    /* Style for the graph container */
+    #cy {
+        flex: 1;
+        width: 100%;
+        max-width: 1200px;
+        height: 600px;
+        border: 1px solid #ccc;
+        background-color: #fff;
+    }
+
+    /* Style for control buttons */
+    .controls {
+        margin-bottom: 10px;
+    }
+
+    .controls button {
+        padding: 10px 20px;
+        margin: 0 5px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        background-color: #0074D9;
+        color: #fff;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+    }
+
+    .controls button:hover {
+        background-color: #005fa3;
+    }
+</style>
+
+<h1>{{ PAGE_TITLE }}</h1>
+
+<div class="container">
+    <!-- Control Buttons -->
+    <div class="controls">
+        <button id="zoom-in">Zoom In</button>
+        <button id="zoom-out">Zoom Out</button>
+        <button id="reset">Reset Zoom</button>
+    </div>
+
+    <!-- Graph Container -->
+    <div id="cy"></div>
+</div>
+
+<script>
+    // Wait for the DOM to fully load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Cytoscape with elements and style
+        const data = {{ GRAPH_JSON }};
+        const elements = [];
+
+        // Iterate through each key-value pair in the JSON object
+        for (const [key, values] of Object.entries(data)) {
+            // Add a node for the key
+            elements.push({ data: { id: key, label: key } });
+
+            // Add nodes and edges for each value
+            values.forEach(value => {
+                elements.push({ data: { id: value, label: value } }); // Node for value
+                elements.push({ data: { source: value, target: key } }); // Edge from value to key
+            });
+        }
+        var cy = cytoscape({
+            container: document.getElementById('cy'), // Container to render in
+            elements: elements,
+            style: [ // Styling for nodes and edges
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': '#0074D9',
+                        'label': 'data(label)',
+                        'color': '#fff',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'font-size': '10px',
+                        'width': '60px',
+                        'height': '60px'
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 2,
+                        'line-color': '#ccc',
+                        'target-arrow-color': '#ccc',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier'
+                    }
+                },
+                {
+                    selector: ':selected',
+                    style: {
+                        'background-color': '#FF4136',
+                        'line-color': '#FF4136',
+                        'target-arrow-color': '#FF4136',
+                        'source-arrow-color': '#FF4136'
+                    }
+                }
+            ],
+
+            layout: {
+                name: 'breadthfirst',
+                directed: true,
+                spacingFactor: 2.75,
+                animate: true
+            }
+        });
+
+        // Fit the graph within the container
+        cy.on('layoutready', function(){
+            cy.fit(cy.elements(), 50);
+        });
+
+        // Optional: Add interactivity
+        cy.on('tap', 'node', function(evt){
+            var node = evt.target;
+            alert('Tapped node: ' + node.id());
+        });
+
+        // Zoom and Pan Controls
+        document.getElementById('zoom-in').addEventListener('click', function(){
+            cy.zoom({
+                level: cy.zoom() * 1.2, // Zoom in by 20%
+                renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+            });
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', function(){
+            cy.zoom({
+                level: cy.zoom() / 1.2, // Zoom out by ~16.7%
+                renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+            });
+        });
+
+        document.getElementById('reset').addEventListener('click', function(){
+            cy.fit(cy.elements(), 50); // Fit the graph to the container with padding
+        });
+    });
+</script>
+
+{% endblock %}

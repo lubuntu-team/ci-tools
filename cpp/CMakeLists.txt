@@ -1,63 +1,141 @@
-cmake_minimum_required(VERSION 3.21)
-project(lubuntuci CXX)
+cmake_minimum_required(VERSION 3.16)
+project(lubuntu_ci_all CXX)
 
+set(CMAKE_AUTOMOC ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+#
+# Allow the user to override LAUNCHPAD_CPP_INCLUDE_DIR/LAUNCHPAD_CPP_LIBRARY
+#
+if (NOT DEFINED LAUNCHPAD_CPP_INCLUDE_DIR)
+    set(LAUNCHPAD_CPP_INCLUDE_DIR "/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp")
+endif()
+if (NOT DEFINED LAUNCHPAD_CPP_LIBRARY)
+    set(LAUNCHPAD_CPP_LIBRARY "/srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so")
+endif()
 
-find_package(yaml-cpp REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Core HttpServer Sql)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
-find_package(CURL REQUIRED)
-find_library(UUID_LIB uuid)
-find_package(ZLIB REQUIRED)
-
+find_package(yaml-cpp REQUIRED)
 pkg_check_modules(LIBARCHIVE REQUIRED libarchive)
-include_directories(${LIBARCHIVE_INCLUDE_DIRS})
-link_directories(${LIBARCHIVE_LIBRARY_DIRS})
-add_definitions(${LIBARCHIVE_CFLAGS_OTHER})
+pkg_check_modules(LIBGIT2 REQUIRED libgit2)
+find_package(ZLIB REQUIRED)
+find_package(CURL REQUIRED)
+set(UUID_LIB "uuid")
 
-include_directories(/srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
+#
+# 1. The main library: lubuntuci_lib
+#
+add_library(lubuntuci_lib SHARED
+    common.cpp
+    utilities.cpp
+    ci_logic.cpp
+    ci_database_objs.cpp
+    lubuntuci_lib.cpp
+    task_queue.cpp
+    template_renderer.cpp
+    web_server.cpp
+    sources_parser.cpp
+    naive_bayes_classifier.cpp
+)
 
-add_library(lubuntuci SHARED common.cpp utilities.cpp)
-target_include_directories(lubuntuci PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${LIBARCHIVE_INCLUDE_DIRS})
-target_link_libraries(lubuntuci PUBLIC yaml-cpp::yaml-cpp PRIVATE CURL::libcurl ${LIBARCHIVE_LIBRARIES} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
+target_include_directories(lubuntuci_lib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    "${LAUNCHPAD_CPP_INCLUDE_DIR}"
+)
 
-add_library(update_maintainer_lib STATIC update-maintainer-lib.cpp)
-target_include_directories(update_maintainer_lib PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(update_maintainer_lib PRIVATE lubuntuci yaml-cpp::yaml-cpp CURL::libcurl)
+target_link_libraries(lubuntuci_lib
+    Qt6::Core
+    Qt6::HttpServer
+    Qt6::Sql
+    yaml-cpp
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ZLIB::ZLIB
+    CURL::libcurl
+    ${UUID_LIB}
+)
+
+#
+# 2. The update-maintainer-lib library
+#
+add_library(update_maintainer_lib STATIC
+    update-maintainer-lib.cpp
+)
+target_include_directories(update_maintainer_lib PRIVATE
+    "${LAUNCHPAD_CPP_INCLUDE_DIR}"
+)
+target_link_libraries(update_maintainer_lib
+    lubuntuci_lib
+    yaml-cpp
+    CURL::libcurl
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    ZLIB::ZLIB
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ${UUID_LIB}
+)
+
+#
+# 3. Build each executable
+#
 
 add_executable(update-maintainer update-maintainer.cpp)
-target_link_libraries(update-maintainer PRIVATE update_maintainer_lib)
-
-add_executable(build-packages build-packages.cpp)
-target_include_directories(build-packages PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(build-packages PRIVATE lubuntuci PkgConfig::LIBGIT2 update_maintainer_lib yaml-cpp::yaml-cpp)
-
-add_executable(fetch-indexes fetch-indexes.cpp utilities.cpp)
-target_include_directories(fetch-indexes PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(fetch-indexes PRIVATE lubuntuci CURL::libcurl yaml-cpp::yaml-cpp ZLIB::ZLIB /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
+target_link_libraries(update-maintainer
+    lubuntuci_lib
+    update_maintainer_lib
+    yaml-cpp
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    ZLIB::ZLIB
+    CURL::libcurl
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ${UUID_LIB}
+)
 
 add_executable(lintian-ppa lintian-ppa.cpp)
-target_include_directories(lintian-ppa PRIVATE /srv/lubuntu-ci/repos/ci-tools/include/launchpadlib-cpp)
-target_link_libraries(lintian-ppa PRIVATE lubuntuci ${UUID_LIB} /srv/lubuntu-ci/repos/ci-tools/lib/liblaunchpad.so)
-
-set_target_properties(lubuntuci build-packages fetch-indexes update-maintainer lintian-ppa PROPERTIES
-    BUILD_WITH_INSTALL_RPATH TRUE
-    INSTALL_RPATH "$ORIGIN/lib"
+target_link_libraries(lintian-ppa
+    lubuntuci_lib
+    yaml-cpp
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ZLIB::ZLIB
+    CURL::libcurl
+    ${UUID_LIB}
 )
 
-install(TARGETS lubuntuci
-    LIBRARY DESTINATION lib
+add_executable(fetch-indexes fetch-indexes.cpp)
+target_link_libraries(fetch-indexes
+    lubuntuci_lib
+    yaml-cpp
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ZLIB::ZLIB
+    CURL::libcurl
+    ${UUID_LIB}
 )
 
-install(TARGETS build-packages fetch-indexes update-maintainer lintian-ppa
-    RUNTIME DESTINATION .
+add_executable(web_ui main.cpp)
+target_link_libraries(web_ui
+    lubuntuci_lib
+    yaml-cpp
+    ${LIBARCHIVE_LIBRARIES}
+    ${LIBGIT2_LIBRARIES}
+    ZLIB::ZLIB
+    CURL::libcurl
+    "${LAUNCHPAD_CPP_LIBRARY}"
+    ${UUID_LIB}
 )
 
-install(FILES common.h update-maintainer-lib.h utilities.h
-    DESTINATION include/lubuntuci
-)
+#
+# Copy templates
+#
+file(COPY ../templates
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ../static
+     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

@@ -13,7 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#pragma once
-#include <string>
+#include <QCoreApplication>
+#include <iostream>
+#include "web_server.h"
 
-void update_maintainer(const std::string &debian_directory, bool verbose);
+int main(int argc, char *argv[])
+{
+    QCoreApplication app(argc, argv);
+
+    WebServer server;
+    // You can pick 80 if running as root or with CAP_NET_BIND_SERVICE
+    // or 8080 if unprivileged
+    if (!server.start_server(8080)) {
+        std::cerr << "[ERROR] Failed to start server on port 8080\n";
+        return 1;
+    }
+
+    return app.exec();
+}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{PAGE_TITLE}}</h1>
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    {% if PAGE_TYPE == 'running' %}
+    <a class="nav-link active" aria-current="page" href="/tasks">Running</a>
+    {% else %}
+    <a class="nav-link" href="/tasks">Running</a>
+    {% endif %}
+  </li>
+  <li class="nav-item">
+    {% if PAGE_TYPE == 'queued' %}
+    <a class="nav-link active" aria-current="page" href="/tasks?type=queued">Queued</a>
+    {% else %}
+    <a class="nav-link" href="/tasks?type=queued">Queued</a>
+    {% endif %}
+  </li>
+  <li class="nav-item">
+    {% if PAGE_TYPE == 'complete' %}
+    <a class="nav-link active" aria-current="page" href="/tasks?type=complete">Complete</a>
+    {% else %}
+    <a class="nav-link" href="/tasks?type=complete">Complete</a>
+    {% endif %}
+  </li>
+</ul>
+<div class="table-responsive">
+    <table class="table table-striped table-bordered">
+        <thead class="table-dark">
+            <tr>
+                <th scope="col">Score</th>
+                <th scope="col">Queued</th>
+                <th scope="col">Package</th>
+                <th scope="col">Status</th>
+                {% if PAGE_TYPE != 'queued' %}
+                <th scope="col">Log</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td>{{ task.score }}</td>
+                <td>
+                    {% if PAGE_TYPE == 'running' %}
+                    Started at <span data-timestamp="{{ task.start_timestamp }}"></span><br />
+                    (Duration: <span data-timedelta="{{ task.running_timedelta }}"></span>)
+                    {% elif PAGE_TYPE == 'queued' %}
+                    <span data-timestamp="{{ task.queued_timestamp }}"></span>
+                    {% else %}
+                    {% if task.successful == 'true' %}
+                    <i class="fas fa-check" style="color: green;"></i> <b>Task Succeeded</b><br />
+                    {% else %}
+                    <i class="fas fa-times-circle" style="color: red;"></i> <b>Task Failed</b><br />
+                    {% endif %}
+                    Started at <span data-timestamp="{{ task.start_timestamp }}"></span><br />
+                    Finished at <span data-timestamp="{{ task.finish_timestamp }}"></span><br />
+                    (Duration: <span data-timedelta="{{ task.running_timedelta }}"></span>)
+                    {% endif %}
+                </td>
+                <td>
+                    Name: {{ task.package_name }}<br />
+                    Release: {{ task.package_codename }}
+                </td>
+                <td>{{ task.job_status }}</td>
+                {% if PAGE_TYPE != 'queued' %}
+                <td>
+                    <div class="bg-light font-monospace p-2 rounded overflow-scroll" style="max-height: 15em; white-space: pre-wrap;">{{ task.log }}</div>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function formatDuration(ms) {
+    if (typeof ms !== "number" || ms < 0) {
+        throw new Error("Input must be a non-negative number representing milliseconds.");
+    }
+
+    // statics
+    const millisecondsInOneSecond = 1000;
+    const millisecondsInOneMinute = 60 * millisecondsInOneSecond;
+    const millisecondsInOneHour = 60 * millisecondsInOneMinute;
+    const millisecondsInOneDay = 24 * millisecondsInOneHour;
+
+    // calculate
+    const days = Math.floor(ms / millisecondsInOneDay);
+    const hours = Math.floor((ms % millisecondsInOneDay) / millisecondsInOneHour);
+    const minutes = Math.floor((ms % millisecondsInOneHour) / millisecondsInOneMinute);
+    const seconds = Math.floor((ms % millisecondsInOneMinute) / millisecondsInOneSecond);
+    const milliseconds = ms % millisecondsInOneSecond;
+
+    /**
+    * Pads a number with leading zeros to achieve the desired length.
+    *
+    * @param {number} num - The number to pad.
+    * @param {number} size - The desired string length.
+    * @returns {string} - The padded string.
+    */
+    const pad = (num, size) => {
+        let s = num.toString();
+        while (s.length < size) s = "0" + s;
+        return s;
+    };
+
+    // Construct the formatted string
+    let formatted = "";
+
+    if (days > 0) {
+        formatted += `${days}:`;
+    }
+
+    formatted += `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)}.${pad(milliseconds, 3)}`;
+
+    return formatted;
+}
+
+document.querySelectorAll("[data-timestamp]").forEach((el) => {
+    const timestamp = parseInt(el.getAttribute("data-timestamp"), 10);
+
+    if (!isNaN(timestamp)) {
+        const date = new Date(timestamp);
+        const formattedDate = date.toLocaleString(undefined, {
+            timeZoneName: "short"
+        });
+        el.textContent = formattedDate;
+    }
+});
+
+document.querySelectorAll("[data-timedelta]").forEach((el) => {
+    const timestamp = parseInt(el.getAttribute("data-timedelta"));
+
+    if (!isNaN(timestamp)) {
+        el.textContent = formatDuration(timestamp);
+    }
+});
+
+</script>
+{% endblock %}

@@ -54,7 +54,6 @@ void processRelease(const std::string& release, const YAML::Node& config);
 void refresh(const std::string& url, const std::string& pocket, const std::string& britneyCache, std::mutex& logMutex);
 int executeAndLog(const std::string& command);
 
-// Change global_lp_opt to match login() return type
 static std::optional<std::shared_ptr<launchpad>> global_lp_opt;
 static launchpad* global_lp = nullptr;
 
@@ -486,7 +485,7 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
     std::string DEST = BRITNEY_DATADIR + RELEASE + "-proposed";
     fs::create_directories(DEST);
     fs::create_directories(fs::path(BRITNEY_DATADIR) / (RELEASE + "-proposed") / "state");
-    writeFile(fs::path(BRITNEY_DATADIR) / (RELEASE + "-proposed") / "state" / "age-policy-dates", "");
+    write_file(fs::path(BRITNEY_DATADIR) / (RELEASE + "-proposed") / "state" / "age-policy-dates", "");
 
     fs::remove(fs::path(DEST) / "Hints");
     fs::create_symlink(BRITNEY_HINTDIR, fs::path(DEST) / "Hints");
@@ -495,39 +494,39 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
         std::string sourcesContent;
         for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE + SOURCE_PPA + "-" + RELEASE)) {
             if (p.path().filename() == "Sources.gz") {
-                sourcesContent += decompressGzip(p.path());
+                sourcesContent += decompress_gzip(p.path());
             }
         }
-        writeFile(fs::path(DEST) / "Sources", sourcesContent);
+        write_file(fs::path(DEST) / "Sources", sourcesContent);
 
         for (const auto& arch : ARCHES) {
             std::string packagesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE + SOURCE_PPA + "-" + RELEASE)) {
                 if (p.path().filename() == "Packages.gz" && p.path().parent_path().string().find("binary-" + arch) != std::string::npos) {
-                    packagesContent += decompressGzip(p.path());
+                    packagesContent += decompress_gzip(p.path());
                 }
             }
-            writeFile(fs::path(DEST) / ("Packages_" + arch), packagesContent);
+            write_file(fs::path(DEST) / ("Packages_" + arch), packagesContent);
         }
         for (const auto& arch : PORTS_ARCHES) {
             std::string packagesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE + SOURCE_PPA + "-" + RELEASE)) {
                 if (p.path().filename() == "Packages.gz" && p.path().parent_path().string().find("binary-" + arch) != std::string::npos) {
-                    packagesContent += decompressGzip(p.path());
+                    packagesContent += decompress_gzip(p.path());
                 }
             }
-            writeFile(fs::path(DEST) / ("Packages_" + arch), packagesContent);
+            write_file(fs::path(DEST) / ("Packages_" + arch), packagesContent);
         }
 
-        writeFile(fs::path(DEST) / "Blocks", "");
-        writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
+        write_file(fs::path(DEST) / "Blocks", "");
+        write_file(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
     }
 
     {
         DEST = BRITNEY_DATADIR + RELEASE;
         fs::create_directories(DEST);
         fs::create_directories(fs::path(BRITNEY_DATADIR) / RELEASE / "state");
-        writeFile(fs::path(BRITNEY_DATADIR) / RELEASE / "state" / "age-policy-dates", "");
+        write_file(fs::path(BRITNEY_DATADIR) / RELEASE / "state" / "age-policy-dates", "");
 
         fs::remove(fs::path(DEST) / "Hints");
         fs::create_symlink(BRITNEY_HINTDIR, fs::path(DEST) / "Hints");
@@ -536,45 +535,45 @@ void processRelease(const std::string& RELEASE, const YAML::Node& config) {
             std::string sourcesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE)) {
                 if (p.path().filename() == "Sources.gz" && p.path().string().find(RELEASE) != std::string::npos) {
-                    sourcesContent += decompressGzip(p.path());
+                    sourcesContent += decompress_gzip(p.path());
                 }
             }
-            writeFile(fs::path(DEST) / "Sources", sourcesContent);
-            regexReplaceInFile(fs::path(DEST) / "Sources", "Section: universe/", "Section: ");
+            write_file(fs::path(DEST) / "Sources", sourcesContent);
+            regex_replace_in_file(fs::path(DEST) / "Sources", "Section: universe/", "Section: ");
         }
 
         for (const auto& arch : ARCHES) {
             std::string packagesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE)) {
                 if (p.path().filename() == "Packages.gz" && p.path().string().find(RELEASE) != std::string::npos && p.path().parent_path().string().find("binary-" + arch) != std::string::npos) {
-                    packagesContent += decompressGzip(p.path());
+                    packagesContent += decompress_gzip(p.path());
                 }
             }
             fs::path packagesFilePath = fs::path(DEST) / ("Packages_" + arch);
-            writeFile(packagesFilePath, packagesContent);
-            regexReplaceInFile(packagesFilePath, "Section: universe/", "Section: ");
+            write_file(packagesFilePath, packagesContent);
+            regex_replace_in_file(packagesFilePath, "Section: universe/", "Section: ");
         }
 
         for (const auto& arch : PORTS_ARCHES) {
             std::string packagesContent;
             for (auto& p : fs::recursive_directory_iterator(BRITNEY_CACHE)) {
                 if (p.path().filename() == "Packages.gz" && p.path().string().find(RELEASE) != std::string::npos && p.path().parent_path().string().find("binary-" + arch) != std::string::npos) {
-                    packagesContent += decompressGzip(p.path());
+                    packagesContent += decompress_gzip(p.path());
                 }
             }
             fs::path packagesFilePath = fs::path(DEST) / ("Packages_" + arch);
-            writeFile(packagesFilePath, packagesContent);
-            regexReplaceInFile(packagesFilePath, "Section: universe/", "Section: ");
+            write_file(packagesFilePath, packagesContent);
+            regex_replace_in_file(packagesFilePath, "Section: universe/", "Section: ");
         }
 
-        writeFile(fs::path(DEST) / "Blocks", "");
-        writeFile(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
+        write_file(fs::path(DEST) / "Blocks", "");
+        write_file(fs::path(BRITNEY_DATADIR) / (SOURCE_PPA + "-" + RELEASE) / "Dates", "");
     }
 
     {
-        std::string configContent = readFile(BRITNEY_CONF);
+        std::string configContent = read_file(BRITNEY_CONF);
         configContent = std::regex_replace(configContent, std::regex("%\\{SERIES\\}"), RELEASE);
-        writeFile("britney.conf", configContent);
+        write_file("britney.conf", configContent);
     }
 
     std::cout << "Running britney..." << std::endl;
@@ -769,5 +768,5 @@ void refresh(const std::string& url, const std::string& pocket, const std::strin
 
     fs::path outputPath = dir / urlPath.filename();
 
-    downloadFileWithTimestamping(url, outputPath, logFilePath, logMutex);
+    download_file_with_timestamping(url, outputPath, logFilePath, logMutex);
 }

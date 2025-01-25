@@ -1,4 +1,4 @@
-// Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+// Copyright (C) 2024-2025 Simon Quigley <tsimonq2@ubuntu.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -14,110 +14,146 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "common.h"
+#include "utilities.h"
 #include "/usr/include/archive.h"
-#include "/usr/include/archive_entry.h"
-#include <chrono>
+#include <archive_entry.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
-#include <chrono>
 #include <regex>
+#include <chrono>
+#include <ctime>
+#include <mutex>
+#include <unordered_set>
+#include <QProcess>
 
-namespace fs = std::filesystem;
+// Define the global 'verbose' variable
+bool verbose = false;
 
-static void log_info(const std::string &msg) {
+// Logger function implementations
+void log_info(const std::string &msg) {
     std::cout << "[INFO] " << msg << "\n";
 }
-static void log_error(const std::string &msg) {
+
+void log_warning(const std::string &msg) {
+    std::cerr << "[WARNING] " << msg << "\n";
+}
+
+void log_error(const std::string &msg) {
     std::cerr << "[ERROR] " << msg << "\n";
 }
 
-std::string parse_version(const fs::path &changelog_path) {
-    if (!fs::exists(changelog_path)) {
-        throw std::runtime_error("Changelog not found: " + changelog_path.string());
+void log_verbose(const std::string &msg) {
+    if (verbose) {
+        std::cout << "[VERBOSE] " << msg << "\n";
     }
-    std::ifstream f(changelog_path);
-    if (!f) throw std::runtime_error("Unable to open changelog");
-    std::string first_line;
-    std::getline(f, first_line);
-    f.close();
-
-    size_t start = first_line.find('(');
-    size_t end = first_line.find(')');
-    if (start == std::string::npos || end == std::string::npos) {
-        throw std::runtime_error("Invalid changelog format");
-    }
-    std::string version_match = first_line.substr(start+1, end - (start+1));
-
-    std::string epoch;
-    std::string upstream_version = version_match;
-    if (auto pos = version_match.find(':'); pos != std::string::npos) {
-        epoch = version_match.substr(0, pos);
-        upstream_version = version_match.substr(pos+1);
-    }
-    if (auto pos = upstream_version.find('-'); pos != std::string::npos) {
-        upstream_version = upstream_version.substr(0, pos);
-    }
-
-    std::regex git_regex("(\\+git[0-9]+)?(~[a-z]+)?$");
-    upstream_version = std::regex_replace(upstream_version, git_regex, "");
-
-    auto t = std::time(nullptr);
-    std::tm tm = *std::gmtime(&t);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y%m%d%H%M", &tm);
-    std::string current_date = buf;
-
-    std::string version;
-    if (!epoch.empty()) {
-        version = epoch + ":" + upstream_version + "+git" + current_date;
-    } else {
-        version = upstream_version + "+git" + current_date;
-    }
-
-    return version;
 }
 
-void run_command(const std::vector<std::string> &cmd, const std::optional<fs::path> &cwd, bool show_output) {
-    std::string full_cmd;
-    for (const auto &c : cmd) {
-        full_cmd += c + " ";
+namespace fs = std::filesystem;
+
+bool run_command(const std::vector<std::string> &cmd,
+                 const std::optional<std::filesystem::path> &cwd,
+                 bool show_output,
+                 std::shared_ptr<Log> log) {
+    if (cmd.empty()) {
+        throw std::runtime_error("Command is empty");
     }
+
+    QProcess process;
+
+    // Set the working directory if provided
     if (cwd) {
-        full_cmd = "cd " + cwd->string() + " && " + full_cmd;
+        process.setWorkingDirectory(QString::fromStdString(cwd->string()));
     }
-    log_info("Executing: " + full_cmd);
-    int ret = std::system(full_cmd.c_str());
-    if (ret != 0) {
-        log_error("Command failed: " + full_cmd);
-        throw std::runtime_error("Command failed");
-    }
-    if (show_output) {
-        std::cout << "[INFO] Command succeeded: " + full_cmd << "\n";
-    }
-}
 
-void clean_old_logs(const fs::path &log_dir, int max_age_seconds) {
-    auto now = std::chrono::system_clock::now();
-    for (auto &entry : fs::directory_iterator(log_dir)) {
-        if (fs::is_regular_file(entry)) {
-            auto ftime = fs::last_write_time(entry);
-            auto sctp = decltype(ftime)::clock::to_sys(ftime);
-            auto age = std::chrono::duration_cast<std::chrono::seconds>(now - sctp).count();
-            if (age > max_age_seconds) {
-                fs::remove(entry);
+    // Set up the environment (if needed)
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    process.setProcessEnvironment(env);
+
+    // Extract executable and arguments
+    QString program = QString::fromStdString(cmd[0]);
+    QStringList arguments;
+    for (size_t i = 1; i < cmd.size(); ++i) {
+        arguments << QString::fromStdString(cmd[i]);
+    }
+
+    // Start the command
+    process.start(program, arguments);
+    if (!process.waitForStarted()) {
+        throw std::runtime_error("Failed to start the command: " + program.toStdString());
+    }
+
+    // Stream output while the process is running
+    while (process.state() == QProcess::Running) {
+        if (process.waitForReadyRead()) {
+            QByteArray output = process.readAllStandardOutput();
+            QByteArray error = process.readAllStandardError();
+
+            if (log) {
+                log->append(output.toStdString());
+                log->append(error.toStdString());
+            }
+
+            if (show_output) {
+                std::cout << output.toStdString();
+                std::cerr << error.toStdString();
             }
         }
     }
+
+    // Wait for the process to finish
+    process.waitForFinished();
+
+    // Capture return code and errors
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        QByteArray error_output = process.readAllStandardError();
+        std::string error_message = "Command failed with exit code: " + std::to_string(process.exitCode());
+        if (!error_output.isEmpty()) {
+            error_message += "\nError Output: " + error_output.toStdString();
+        }
+        throw std::runtime_error(error_message);
+    }
+
+    return true;
 }
 
+// Function to extract excluded files from a copyright file
+std::vector<std::string> extract_files_excluded(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filepath);
+    }
 
-void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions) {
-    std::cout << "[INFO] Creating tarball: " << tarballPath << std::endl;
+    std::vector<std::string> files_excluded;
+    std::string line;
+    std::regex files_excluded_pattern(R"(Files-Excluded:\s*(.*))");
+    bool in_files_excluded = false;
+
+    while (std::getline(file, line)) {
+        if (std::regex_match(line, files_excluded_pattern)) {
+            in_files_excluded = true;
+            std::smatch match;
+            if (std::regex_search(line, match, files_excluded_pattern) && match.size() > 1) {
+                files_excluded.emplace_back(match[1]);
+            }
+        } else if (in_files_excluded) {
+            if (!line.empty() && (line[0] == ' ' || line[0] == '\t')) {
+                files_excluded.emplace_back(line.substr(1));
+            } else {
+                break; // End of Files-Excluded block
+            }
+        }
+    }
+
+    return files_excluded;
+}
+
+// Function to create a tarball
+void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions, std::shared_ptr<Log> log) {
+    log->append("Creating tarball: " + tarballPath);
 
     struct archive* a = archive_write_new();
     if (!a) {
@@ -145,43 +181,69 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         throw std::runtime_error(err);
     }
 
-    for (auto it = fs::recursive_directory_iterator(directory, fs::directory_options::follow_directory_symlink | fs::directory_options::skip_permission_denied);
+    // Initialize a set to track added relative paths to prevent duplication
+    std::unordered_set<std::string> added_paths;
+
+    // Iterate through the directory recursively without following symlinks
+    for (auto it = fs::recursive_directory_iterator(
+             directory,
+             fs::directory_options::skip_permission_denied);
          it != fs::recursive_directory_iterator(); ++it) {
         const auto& path = it->path();
         std::error_code ec;
 
-        fs::path relativePath = fs::relative(path, directory, ec);
+        fs::path relative_path = fs::relative(path, directory, ec);
         if (ec) {
-            log_error("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
+            log->append("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
             continue;
         }
 
-        bool excluded = std::any_of(exclusions.begin(), exclusions.end(), [&relativePath](const std::string& exclusion) {
-            return relativePath.string().find(exclusion) != std::string::npos;
+        // Normalize the relative path to avoid discrepancies
+        fs::path normalized_relative_path = relative_path.lexically_normal();
+        std::string relative_path_str = normalized_relative_path.string();
+
+        // Check if this path has already been added
+        if (!added_paths.insert(relative_path_str).second) {
+            log->append("Duplicate path detected and skipped: " + relative_path_str);
+            continue; // Skip adding this duplicate path
+        }
+
+        // Exclusion logic (if any exclusions are provided)
+        bool excluded = std::any_of(exclusions.begin(), exclusions.end(), [&relative_path_str](const std::string& exclusion) {
+            return relative_path_str.find(exclusion) != std::string::npos;
         });
         if (excluded) { continue; }
 
         fs::file_status fstatus = it->symlink_status(ec);
         if (ec) {
-            log_error("Failed to get file status for: " + path.string() + " Error: " + ec.message());
+            log->append("Failed to get file status for: " + path.string() + " Error: " + ec.message());
             continue;
         }
 
         struct archive_entry* entry = archive_entry_new();
         if (!entry) {
-            log_error("Failed to create archive entry for: " + path.string());
+            log->append("Failed to create archive entry for: " + path.string());
             archive_write_free(a);
             throw std::runtime_error("Failed to create archive entry.");
         }
 
-        archive_entry_set_pathname(entry, relativePath.c_str());
+        std::string entry_path = relative_path_str;
+        if (fs::is_directory(fstatus)) {
+            // Ensure the directory pathname ends with '/'
+            if (!entry_path.empty() && entry_path.back() != '/') {
+                entry_path += '/';
+            }
+            archive_entry_set_pathname(entry, entry_path.c_str());
+        } else {
+            archive_entry_set_pathname(entry, entry_path.c_str());
+        }
 
         // Set file type, permissions, and size
         if (fs::is_regular_file(fstatus)) {
             // Regular file
             uintmax_t filesize = fs::file_size(path, ec);
             if (ec) {
-                log_error("Cannot get file size for: " + path.string() + " Error: " + ec.message());
+                log->append("Cannot get file size for: " + path.string() + " Error: " + ec.message());
                 archive_entry_free(entry);
                 continue;
             }
@@ -192,7 +254,7 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         else if (fs::is_symlink(fstatus)) {
             fs::path target = fs::read_symlink(path, ec);
             if (ec) {
-                log_error("Cannot read symlink for: " + path.string() + " Error: " + ec.message());
+                log->append("Cannot read symlink for: " + path.string() + " Error: " + ec.message());
                 archive_entry_free(entry);
                 continue;
             }
@@ -206,7 +268,7 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
             archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
         }
         else {
-            log_error("Unsupported file type for: " + path.string());
+            log->append("Unsupported file type for: " + path.string());
             archive_entry_free(entry);
             continue;
         }
@@ -215,18 +277,18 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         fs::file_time_type ftime = fs::last_write_time(path, ec);
         std::time_t mtime;
         if (ec) {
-            log_error("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
+            log->append("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
             // Obtain current UTC time as fallback
             auto now = std::chrono::system_clock::now();
             mtime = std::chrono::system_clock::to_time_t(now);
-            log_info("Setting default mtime (current UTC time) for: " + path.string());
+            log->append("Setting default mtime (current UTC time) for: " + path.string());
         } else {
             mtime = to_time_t(ftime);
         }
         archive_entry_set_mtime(entry, mtime, 0);
 
         if (archive_write_header(a, entry) != ARCHIVE_OK) {
-            log_error("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a));
+            log->append("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a));
             archive_entry_free(entry);
             continue;
         }
@@ -234,7 +296,7 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         if (fs::is_regular_file(fstatus)) {
             std::ifstream fileStream(path, std::ios::binary);
             if (!fileStream) {
-                log_error("Failed to open file for reading: " + path.string());
+                log->append("Failed to open file for reading: " + path.string());
                 archive_entry_free(entry);
                 continue;
             }
@@ -246,14 +308,14 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
                 std::streamsize bytesRead = fileStream.gcount();
                 if (bytesRead > 0) {
                     if (archive_write_data(a, buffer, static_cast<size_t>(bytesRead)) < 0) {
-                        log_error("Failed to write data for: " + path.string() + " Error: " + archive_error_string(a));
+                        log->append("Failed to write data for: " + path.string() + " Error: " + archive_error_string(a));
                         break;
                     }
                 }
             }
 
             if (fileStream.bad()) {
-                log_error("Error reading file: " + path.string());
+                log->append("Error reading file: " + path.string());
             }
         }
 
@@ -273,23 +335,5 @@ void create_tarball(const std::string& tarballPath, const std::string& directory
         throw std::runtime_error(err);
     }
 
-    std::cout << "[INFO] Tarball created and compressed: " << tarballPath << std::endl;
-}
-
-std::string get_current_utc_time() {
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    std::tm tm_utc;
-    gmtime_r(&now_time, &tm_utc);
-    char buf[20];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm_utc);
-    return std::string(buf);
-}
-
-std::time_t to_time_t(const fs::file_time_type& ftime) {
-    using namespace std::chrono;
-    // Convert to system_clock time_point
-    auto sctp = time_point_cast<system_clock::duration>(ftime - fs::file_time_type::clock::now()
-        + system_clock::now());
-    return system_clock::to_time_t(sctp);
+    log->append("Tarball created and compressed: " + tarballPath);
 }

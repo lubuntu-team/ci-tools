@@ -13,24 +13,73 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#pragma once
+#ifndef COMMON_H
+#define COMMON_H
+
+#include "utilities.h"
 #include <string>
-#include <vector>
-#include <filesystem>
 #include <optional>
-#include <semaphore>
+#include <filesystem>
+#include <shared_mutex>
+#include <mutex>
+#include <vector>
+#include <regex>
 
-std::string parse_version(const std::filesystem::path &changelog_path);
-void run_command(const std::vector<std::string> &cmd, const std::optional<std::filesystem::path> &cwd = std::nullopt, bool show_output=false);
-void clean_old_logs(const std::filesystem::path &log_dir, int max_age_seconds=86400);
-void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions);
-std::string get_current_utc_time();
-std::time_t to_time_t(const std::filesystem::file_time_type& ftime);
+namespace fs = std::filesystem;
+class Task;
 
-static std::counting_semaphore<5> semaphore(5);
-struct semaphore_guard {
-    std::counting_semaphore<5> &sem;
-    semaphore_guard(std::counting_semaphore<5> &s) : sem(s) { sem.acquire(); }
-    ~semaphore_guard() { sem.release(); }
+class Log {
+private:
+    std::string data = "";
+    mutable std::shared_mutex lock_;
+    std::weak_ptr<Task> task_context_;
+
+public:
+    void append(const std::string& str) {
+        std::unique_lock lock(lock_);
+        if (str.empty()) { return; }
+        data += std::format("[{}] {}", get_current_utc_time("%Y-%m-%dT%H:%M:%SZ"), str.ends_with('\n') ? str : str + '\n');
+    }
+
+    void set_log(const std::string& str) {
+        std::unique_lock lock(lock_);
+        data = str;
+    }
+
+    std::string get() const {
+        std::shared_lock lock(lock_);
+        return std::regex_replace(data, std::regex(R"(^\s+)"), "");
+    }
+
+    void assign_task_context(std::shared_ptr<Task> task) {
+        task_context_ = task;
+    }
+
+    std::shared_ptr<Task> get_task_context() const {
+        return task_context_.lock();
+    }
 };
 
+// Logger functions
+extern bool verbose;
+void log_info(const std::string &msg);
+void log_warning(const std::string &msg);
+void log_error(const std::string &msg);
+void log_verbose(const std::string &msg);
+
+// Function to run a command with optional working directory and show output
+bool run_command(const std::vector<std::string> &cmd,
+                 const std::optional<fs::path> &cwd = std::nullopt,
+                 bool show_output = false,
+                 std::shared_ptr<Log> log = nullptr);
+
+// Function to extract excluded files from a copyright file
+std::vector<std::string> extract_files_excluded(const std::string& filepath);
+
+// Function to create a tarball
+void create_tarball(const std::string& tarballPath,
+                    const std::string& directory,
+                    const std::vector<std::string>& exclusions,
+                    std::shared_ptr<Log> log = nullptr);
+
+#endif // COMMON_H

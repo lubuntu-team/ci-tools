@@ -1,3 +1,5 @@
+// cpp/update-maintainer.cpp
+
 // Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -13,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "update-maintainer-lib.h"
+#include "lubuntuci_lib.h"
 #include <iostream>
 
 int main(int argc, char** argv) {
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
     }
 
     try {
-        update_maintainer(debian_directory, verbose);
+        //LubuntuCI::update_maintainer(debian_directory, verbose);
         if(verbose) {
             std::cout << "Maintainer updated successfully." << std::endl;
         }

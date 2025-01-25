@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{PAGE_TITLE}}</h1>
+<p class="lead">Below is the list of repositories we can build &amp; pull.</p>
+<div class="btn-group mb-3" role="group">
+  <button class="btn btn-lg btn-success" onclick="doPullAll(this)">Pull All</button>
+  <button class="btn btn-lg btn-secondary" onclick="doBuildAll(this)">Build All</button>
+  <button class="btn btn-lg btn-dark" onclick="doPullAndBuildAll(this)">Pull &amp; Build All</button>
+</div>
+<hr/>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="fw-bold">Page {{page}} of {{total_pages}}</div>
+  <nav>
+    <ul class="pagination pagination-sm mb-0">
+      {% if page>1 %}<li class="page-item"><a class="page-link" href="?page={{page|add:-1}}&sort_by={{sort_by}}&sort_order={{sort_order}}" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a></li>{% endif %}
+      {% for p in pages %}<li class="page-item{% if p==page %}active{% endif %}"><a class="page-link" href="?page={{p}}&sort_by={{sort_by}}&sort_order={{sort_order}}">{{p}}</a></li>{% endfor %}
+      {% if page<total_pages %}<li class="page-item"><a class="page-link" href="?page={{page|add:1}}&sort_by={{sort_by}}&sort_order={{sort_order}}" aria-label="Next"><span aria-hidden="true">&raquo;</span></a></li>{% endif %}
+    </ul>
+  </nav>
+</div>
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th><input style="width: 1.5em; height: 1.5em;" type="checkbox" id="selectAll"></th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=branch_name&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}">Branch{% if sort_by=='branch' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='branch' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=codename&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}">Branch{% if sort_by=='codename' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='codename' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=name&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}">Repository{% if sort_by=='name' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='name' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=packaging_commit&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}"><i class="fa-brands fa-git-alt"></i> Latest Packaging Commit{% if sort_by=='packaging_commit' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='packaging_commit' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=upstream_commit&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}"><i class="fa-brands fa-git-alt"></i> Latest Upstream Commit{% if sort_by=='upstream_commit' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='upstream_commit' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">
+        <a class="text-decoration-none text-body" href="?page={{page}}&sort_by=build_status&sort_order={% if sort_order=='asc' %}desc{% else %}asc{% endif %}"><i class="fa-brands fa-git-alt"></i> Build Status{% if sort_by=='build_status' and sort_order=='asc' %}<i class="fa-solid fa-arrow-up"></i>{% elif sort_by=='build_status' and sort_order=='desc' %}<i class="fa-solid fa-arrow-down"></i>{% endif %}</a>
+      </th>
+      <th class="align-middle">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for repo in repos %}<tr>
+      <td class="align-middle"><input style="width: 1.25em; height: 1.25em;" type="checkbox" name="repoSelect" value="{{repo.id}}"></td>
+      <td class="align-middle">{{repo.branch_name}}</td>
+      <td class="align-middle">{{repo.codename}}</td>
+      <td class="align-middle">{{repo.name}}</td>
+      <td class="align-middle">
+        {% if repo.packaging_commit != "" %}
+        <a href="{{repo.packaging_commit_url}}">
+          <i class="fa-solid fa-code-commit"></i> {{repo.packaging_commit}}
+        </a>
+        {% else %}
+        No commit found.
+        {% endif %}
+      </td>
+      <td class="align-middle">
+        {% if repo.upstream_commit != "" %}
+        <a href="{{repo.upstream_commit_url}}">
+          <i class="fa-solid fa-code-commit"></i> {{repo.upstream_commit}}
+        </a>
+        {% else %}
+        No commit found.
+        {% endif %}
+      </td>
+      <td>
+        <table class="table text-center">
+          <tbody>
+            <tr>
+              {% if repo.pull_class != "" %}
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.pull_class}} text-white">
+                  Pull
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.tarball_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.tarball_class}} text-white">
+                  Tarball
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.source_build_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.source_build_class}} text-white">
+                  Source Build
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.upload_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.upload_class}} text-white">
+                  Upload
+                </div>
+              </td>
+              {% endif %}
+            </tr>
+            <tr>
+              {% if repo.source_check_class != "" %}
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.source_check_class}} text-white">
+                  Source Check
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.build_check_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.build_check_class}} text-white">
+                  Build Check
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.lintian_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.lintian_class}} text-white">
+                  Lintian
+                </div>
+              </td>
+              {% endif %}
+              {% if repo.britney_class != "" %}
+              <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
+              <td>
+                <div class="justify-content-center align-items-center align-middle {{repo.britney_class}} text-white">
+                  Britney
+                </div>
+              </td>
+              {% endif %}
+            </tr>
+          </tbody>
+        </table>
+      </td>
+      <td class="align-middle">
+        <button class="btn btn-outline-secondary" onclick="doPull('{{repo.id}}', this)">Pull</button>
+        <button class="btn btn-primary" onclick="doBuild('{{repo.id}}', this)">Build</button>
+        <button class="btn btn-secondary" onclick="doViewLog('{{repo.id}}', this)">View Log</button>
+      </td>
+    </tr>{% endfor %}
+  </tbody>
+</table>
+<div class="btn-group" role="group">
+  <button class="btn btn-lg btn-primary" onclick="doPullSelected(this)">Pull Selected</button>
+  <button class="btn btn-lg btn-success" onclick="doBuildSelected(this)">Build Selected</button>
+  <button class="btn btn-lg btn-info" onclick="doPullAndBuildSelected(this)">Pull &amp; Build Selected</button>
+</div>
+{% endblock %}
