@@ -823,9 +823,9 @@ bool PackageConf::set_package_confs(QSqlDatabase& p_db) {
 }
 
 void PackageConf::sync(QSqlDatabase& p_db) {
-    bool oneshot = true;
-    while (oneshot) {
-        oneshot = false;
+    bool task_succeeded = true;
+    int attempt = 0;
+    while (!task_succeeded) {
         try {
             QSqlQuery query(p_db);
 
@@ -850,8 +850,13 @@ void PackageConf::sync(QSqlDatabase& p_db) {
             query.addBindValue(branch->id);
             query.addBindValue(release->id);
 
-            if (!query.exec()) {
-                qDebug() << "Failed to sync PackageConf:" << query.lastError().text();
+            attempt++;
+            task_succeeded = query.exec();
+            if (!task_succeeded) {
+                if (query.lastError().text().contains("database is locked")) {
+                    int delay = 1000 * static_cast<int>(std::pow(2, attempt - 1));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                } else task_succeeded = true;
             }
         } catch (...) {}
     }
@@ -1240,10 +1245,12 @@ void Task::save(QSqlDatabase& p_db, int _packageconf_id) {
         query.addBindValue(QString::fromStdString(std::regex_replace(log->get(), std::regex(R"(^\s+)"), "")));
         query.addBindValue(id);
         task_succeeded = query.exec();
+        attempt++;
         if (!task_succeeded) {
-            qDebug() << "Failed to save task to database, retrying:" << query.lastError().text();
-            int delay = 1000 * static_cast<int>(std::pow(2, attempt - 1));
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            if (query.lastError().text().contains("database is locked")) {
+                int delay = 1000 * static_cast<int>(std::pow(2, attempt - 1));
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            } else task_succeeded = true;
         }
     }
 
