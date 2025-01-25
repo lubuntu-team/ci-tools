@@ -214,7 +214,7 @@ bool WebServer::start_server(quint16 port) {
         }
     });
 
-    process_sources_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, lubuntuci] {
+    process_sources_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, lubuntuci, job_statuses] {
         for (auto pkgconf : all_repos) {
             if (!pkgconf->can_check_source_upload()) { continue; }
 
