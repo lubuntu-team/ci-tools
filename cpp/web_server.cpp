@@ -97,13 +97,20 @@ WebServer::WebServer(QObject *parent) : QObject(parent) {}
 }
 
 [[nodiscard]] QHttpServerResponse WebServer::verify_session_token(const QHttpServerRequest &request, const QHttpHeaders &headers) {
-    const QByteArray cookie_header = headers.value(QHttpHeaders::WellKnownHeader::Cookie).toByteArray();
     const QUrl request_url = request.url();
-    const QString base_url = request_url.scheme() + "://" + request_url.host() +
-                             (request_url.port() == -1 ? "" : ':' + QString::number(request_url.port()));
     const QString current_path = request_url.path();
+    auto get = [&](const char* name) -> QString {
+        QByteArray val = headers.value(name).toByteArray();
+        return val.isEmpty() ? QString() : QString::fromUtf8(val);
+    };
 
-    for (const auto &cookie : cookie_header.split(';')
+    const QString scheme = get("X-Forwarded-Proto").isEmpty() ? request_url.scheme() : get("X-Forwarded-Proto");
+    const QString host = get("X-Forwarded-Host").isEmpty() ? request_url.host() : get("X-Forwarded-Host");
+    int port = get("X-Forwarded-Port").isEmpty() ? request.url().port() : get("X-Forwarded-Port").toInt();
+    QString base_url = scheme + "://" + host;
+    if (port != -1 && port != 80 && port != 443) base_url += ":" + QString::number(port);
+
+    for (const auto &cookie : headers.value(QHttpHeaders::WellKnownHeader::Cookie).toByteArray().split(';')
                             | std::views::transform([](const QByteArray &cookie) { return cookie.trimmed(); })
                             | std::views::filter([](const QByteArray &cookie) { return cookie.startsWith("auth_token="); })) {
         if (!validate_token(QString::fromUtf8(cookie.mid(sizeof("auth_token=") - 1)))) break;
