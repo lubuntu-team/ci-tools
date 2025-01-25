@@ -1149,7 +1149,7 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
             std::shared_ptr<Task> tarball_task = std::make_shared<Task>();
             task_queue->enqueue(
                 job_statuses->at("pull"),
-                [this, r, &task_queue, tarball_task, job_statuses](std::shared_ptr<Log> log) mutable {
+                [this, r, &task_queue, &tarball_task, job_statuses](std::shared_ptr<Log> log) mutable {
                     std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
                     if (pull_project(pkgconf, log)) {
                         task_queue->enqueue(
