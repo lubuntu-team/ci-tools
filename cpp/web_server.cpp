@@ -80,21 +80,30 @@ WebServer::WebServer(QObject *parent) : QObject(parent) {}
 }
 
 [[nodiscard]] bool WebServer::validate_token(const QString& token) {
-    // Always 64 characters
+    // Validate token length
     if (token.size() != 64) return false;
-    // Can't validate the active token if there aren't any
+
+    // If there are no active tokens, validation fails
     if (_active_tokens.isEmpty()) return false;
-    // Always present in active_tokens, and not expired
+
+    // Check if the token exists in the active tokens map
     auto it = _active_tokens.find(token);
-    if (it != _active_tokens.end() && it.value() >= QDateTime::currentDateTime()) return true;
-    else {
+    if (it != _active_tokens.end()) {
+        // Check if the token is not expired
+        if (it.value() >= QDateTime::currentDateTime()) return true;
+
+        // Token is expired, erase it safely
         _active_tokens.erase(it);
 
+        // Also remove the token from the person map, if it exists
         auto person_it = _token_person.find(token);
         if (person_it != _token_person.end()) _token_person.erase(person_it);
 
         return false;
     }
+
+    // Token not found
+    return false;
 }
 
 [[nodiscard]] QHttpServerResponse WebServer::verify_session_token(const QHttpServerRequest &request, const QHttpHeaders &headers) {
