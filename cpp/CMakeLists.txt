@@ -135,6 +135,6 @@ target_link_libraries(web_ui
 #
 # Copy templates
 #
-install(TARGETS web_ui build-packages fetch-indexes update-maintainer lintian-ppa
+install(TARGETS web_ui fetch-indexes update-maintainer lintian-ppa
     RUNTIME DESTINATION .
 )
