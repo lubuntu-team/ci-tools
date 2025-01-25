@@ -174,7 +174,7 @@ bool WebServer::start_server(quint16 port) {
     {
         QSqlQuery load_tokens(get_thread_connection());
         load_tokens.prepare("SELECT person.id, person.username, person.logo_url, person_token.token, person_token.expiry_date FROM person INNER JOIN person_token ON person.id = person_token.person_id");
-        load_tokens.exec();
+        ci_query_exec(&load_tokens);
         while (load_tokens.next()) {
             int person_id = load_tokens.value(0).toInt();
             QString username = load_tokens.value(1).toString();
@@ -194,7 +194,7 @@ bool WebServer::start_server(quint16 port) {
 
         expired_tokens.prepare("DELETE FROM person_token WHERE expiry_date < :current_time");
         expired_tokens.bindValue(":current_time", QDateTime::currentDateTime().toString(Qt::ISODate));
-        expired_tokens.exec();
+        ci_query_exec(&expired_tokens);
         for (auto it = _active_tokens.begin(); it != _active_tokens.end();) {
             if (it.value() <= QDateTime::currentDateTime()) it = _active_tokens.erase(it);
             else ++it;
@@ -371,7 +371,7 @@ bool WebServer::start_server(quint16 port) {
                 QSqlQuery get_person(get_thread_connection());
                 get_person.prepare("SELECT id, username, logo_url FROM person WHERE username = ?");
                 get_person.bindValue(0, QString::fromStdString(username));
-                if (!get_person.exec()) { qDebug() << "Error executing SELECT query for person:" << get_person.lastError(); }
+                if (!ci_query_exec(&get_person)) { qDebug() << "Error executing SELECT query for person:" << get_person.lastError(); }
 
                 if (get_person.next()) {
                     person = Person(get_person.value(0).toInt(), get_person.value(1).toString().toStdString(),
@@ -381,7 +381,7 @@ bool WebServer::start_server(quint16 port) {
                     insert_person.prepare("INSERT INTO person (username, logo_url) VALUES (?, ?)");
                     insert_person.bindValue(0, QString::fromStdString(username));
                     insert_person.bindValue(1, QString::fromStdString("https://api.launchpad.net/devel/~" + username + "/logo"));
-                    if (!insert_person.exec()) { qDebug() << "Error executing INSERT query for person:" << insert_person.lastError(); }
+                    if (!ci_query_exec(&insert_person)) { qDebug() << "Error executing INSERT query for person:" << insert_person.lastError(); }
 
                     QVariant last_id = insert_person.lastInsertId();
                     if (last_id.isValid()) {
@@ -401,7 +401,7 @@ bool WebServer::start_server(quint16 port) {
                 insert_token.bindValue(0, person.id);
                 insert_token.bindValue(1, token);
                 insert_token.bindValue(2, one_day.toString(Qt::ISODate));
-                if (!insert_token.exec()) { qDebug() << "Error executing INSERT query for token:" << insert_token.lastError(); }
+                if (!ci_query_exec(&insert_token)) { qDebug() << "Error executing INSERT query for token:" << insert_token.lastError(); }
             }
 
             QString final_html = QString(R"(

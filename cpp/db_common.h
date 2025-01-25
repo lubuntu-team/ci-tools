@@ -17,8 +17,10 @@
 #define DB_COMMON_H
 
 #include <QSqlDatabase>
+#include <QSqlQuery>
 
 QSqlDatabase get_thread_connection();
+bool ci_query_exec(QSqlQuery* query);
 bool init_database(const QString& database_path);
 
 #endif // DB_COMMON_H

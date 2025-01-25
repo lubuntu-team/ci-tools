@@ -14,13 +14,18 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "db_common.h"
+
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <thread>
+
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
-#include <atomic>
-#include <mutex>
 
+// get_thread_connection and init_database
 static std::mutex connection_mutex_;
 static std::atomic<unsigned int> thread_id_counter{1};
 static QString shared_database_path;
@@ -49,6 +54,23 @@ QSqlDatabase get_thread_connection() {
     }
 
     return thread_db;
+}
+
+bool ci_query_exec(QSqlQuery* query) {
+    bool passed = false;
+    int attempt = 0;
+    while (passed) {
+        passed = query->exec();
+        if (passed) return true;
+        attempt++;
+
+        QSqlError error = query->lastError();
+        if (error.text().contains("database is locked")) {
+            int delay = 1000 * static_cast<int>(std::pow(2, attempt - 1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        } else break;
+    }
+    return false;
 }
 
 bool init_database(const QString& database_path) {
