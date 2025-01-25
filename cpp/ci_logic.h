@@ -87,7 +87,7 @@ class CiLogic {
         // Fetch logs for a specific PackageConf ID
         std::string get_logs_for_repo_conf(int package_conf_id);
 
-        std::map<std::string, std::shared_ptr<JobStatus>> get_job_statuses();
+        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> get_job_statuses();
         std::vector<std::shared_ptr<PackageConf>> get_packageconfs();
         std::shared_ptr<PackageConf> get_packageconf_by_id(int id);
         std::vector<std::shared_ptr<PackageConf>> get_packageconfs_by_ids(std::set<int> ids);
@@ -96,10 +96,10 @@ class CiLogic {
 
         std::string queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
                                        std::unique_ptr<TaskQueue>& task_queue,
-                                       const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses);
+                                       std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
         std::string queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
                                        std::unique_ptr<TaskQueue>& task_queue,
-                                       const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses);
+                                       std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
 
         std::vector<Release> releases;
         std::vector<Package> packages;
@@ -112,7 +112,7 @@ class CiLogic {
 
         mutable std::mutex packageconfs_mutex_;
         std::vector<std::shared_ptr<PackageConf>> packageconfs;
-        std::map<std::string, std::shared_ptr<JobStatus>> _cached_job_statuses;
+        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> _cached_job_statuses;
 
         struct package_conf_item {
             std::shared_ptr<PackageConf> first_pkgconf;

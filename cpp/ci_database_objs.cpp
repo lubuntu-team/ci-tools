@@ -312,7 +312,7 @@ PackageConf::PackageConf(int id, std::shared_ptr<Package> package, std::shared_p
                          std::shared_ptr<GitCommit> packaging_commit, std::shared_ptr<GitCommit> upstream_commit)
     : id(id), package(package), release(release), branch(branch), packaging_commit(packaging_commit), upstream_commit(upstream_commit) {}
 
-std::vector<std::shared_ptr<PackageConf>> PackageConf::get_package_confs(std::map<std::string, std::shared_ptr<JobStatus>> jobstatus_map) {
+std::vector<std::shared_ptr<PackageConf>> PackageConf::get_package_confs(std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> jobstatus_map) {
     Branch _tmp_brch = Branch();
     Package _tmp_pkg = Package();
     Release _tmp_rel = Release();
@@ -443,7 +443,7 @@ std::vector<std::shared_ptr<PackageConf>> PackageConf::get_package_confs(std::ma
 
             // Find the matching JobStatus
             std::shared_ptr<JobStatus> jobstatus_ptr;
-            for (const auto &kv : jobstatus_map) {
+            for (const auto &kv : *jobstatus_map) {
                 if (kv.second && kv.second->id == jsid) {
                     jobstatus_ptr = kv.second;
                     break;
@@ -1180,7 +1180,7 @@ bool Task::compare(const std::shared_ptr<Task>& lhs, const std::shared_ptr<Task>
     return lhs->id < rhs->id; // Earlier id first
 }
 
-std::set<std::shared_ptr<Task>> Task::get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::map<std::string, std::shared_ptr<JobStatus>> job_statuses, int page, int per_page) {
+std::set<std::shared_ptr<Task>> Task::get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses, int page, int per_page) {
     std::set<std::shared_ptr<Task>> result;
 
     if (per_page < 1) { per_page = 1; }
@@ -1206,7 +1206,7 @@ std::set<std::shared_ptr<Task>> Task::get_completed_tasks(std::vector<std::share
                 break;
             }
         }
-        for (auto status : job_statuses) {
+        for (auto status : *job_statuses) {
             if (status.second->id == query.value("jobstatus_id").toInt()) {
                 this_task.jobstatus = status.second;
                 break;

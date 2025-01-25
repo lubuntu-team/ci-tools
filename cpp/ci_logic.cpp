@@ -1121,7 +1121,7 @@ std::vector<std::shared_ptr<PackageConf>> CiLogic::get_config(const std::string 
 
 std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
                                         std::unique_ptr<TaskQueue>& task_queue,
-                                        const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses) {
+                                        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses) {
     std::string msg;
     std::map<std::string, std::shared_ptr<package_conf_item>> encountered_items;
     std::mutex task_assignment_mutex;
@@ -1137,8 +1137,8 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                 std::lock_guard<std::mutex> lock(task_assignment_mutex);
                 is_ghost_pull = true;
 
-                r->assign_task(job_statuses.at("pull"), found_it->second->first_pull_task, r);
-                r->assign_task(job_statuses.at("tarball"), found_it->second->first_tarball_task, r);
+                r->assign_task(job_statuses->at("pull"), found_it->second->first_pull_task, r);
+                r->assign_task(job_statuses->at("tarball"), found_it->second->first_tarball_task, r);
                 r->packaging_commit = found_it->second->packaging_commit;
                 r->upstream_commit = found_it->second->upstream_commit;
                 sync(r);
@@ -1148,24 +1148,24 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
 
             std::shared_ptr<Task> tarball_task = std::make_shared<Task>();
             task_queue->enqueue(
-                job_statuses.at("pull"),
+                job_statuses->at("pull"),
                 [this, r, &task_queue, tarball_task, job_statuses](std::shared_ptr<Log> log) mutable {
                     std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
                     if (pull_project(pkgconf, log)) {
                         task_queue->enqueue(
-                            job_statuses.at("tarball"),
+                            job_statuses->at("tarball"),
                             [this, r](std::shared_ptr<Log> log) mutable {
                                 bool tarball_ok = create_project_tarball(r, log);
                             },
                             r
                         );
-                        tarball_task = r->get_task_by_jobstatus(job_statuses.at("tarball"));
+                        tarball_task = r->get_task_by_jobstatus(job_statuses->at("tarball"));
                     }
                 },
                 r
             );
 
-            new_item->first_pull_task = r->get_task_by_jobstatus(job_statuses.at("pull"));
+            new_item->first_pull_task = r->get_task_by_jobstatus(job_statuses->at("pull"));
             new_item->first_tarball_task = tarball_task;
             new_item->first_pkgconf = r;
 
@@ -1183,18 +1183,18 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
 
 std::string CiLogic::queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
                                         std::unique_ptr<TaskQueue>& task_queue,
-                                        const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses) {
+                                        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses) {
     std::string msg;
 
     try {
         for (auto r : repos) {
             task_queue->enqueue(
-                job_statuses.at("source_build"),
+                job_statuses->at("source_build"),
                 [this, r, &task_queue, job_statuses](std::shared_ptr<Log> log) mutable {
                     auto [build_ok, changes_files] = build_project(r, log);
                     if (build_ok) {
                         task_queue->enqueue(
-                            job_statuses.at("upload"),
+                            job_statuses->at("upload"),
                             [this, r, changes_files](std::shared_ptr<Log> log) mutable {
                                 bool upload_ok = upload_and_lint(r, changes_files, false, log);
                                 (void)upload_ok;
@@ -1214,19 +1214,22 @@ std::string CiLogic::queue_build_upload(std::vector<std::shared_ptr<PackageConf>
     return msg;
 }
 
-std::map<std::string, std::shared_ptr<JobStatus>> CiLogic::get_job_statuses() {
-    if (!_cached_job_statuses.empty()) { return _cached_job_statuses; }
+std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> CiLogic::get_job_statuses() {
+    if (_cached_job_statuses != nullptr) { return _cached_job_statuses; }
 
-    static const std::map<std::string, std::shared_ptr<JobStatus>> statuses = {
-        {"pull", std::make_shared<JobStatus>(JobStatus(1))},
-        {"tarball", std::make_shared<JobStatus>(JobStatus(2))},
-        {"source_build", std::make_shared<JobStatus>(JobStatus(3))},
-        {"upload", std::make_shared<JobStatus>(JobStatus(4))},
-        {"source_check", std::make_shared<JobStatus>(JobStatus(5))},
-        {"build_check", std::make_shared<JobStatus>(JobStatus(6))},
-        {"lintian", std::make_shared<JobStatus>(JobStatus(7))},
-        {"britney", std::make_shared<JobStatus>(JobStatus(8))}
-    };
+    static const auto statuses = std::make_shared<std::map<std::string, std::shared_ptr<JobStatus>>>(
+        std::map<std::string, std::shared_ptr<JobStatus>>{
+            {"pull", std::make_shared<JobStatus>(JobStatus(1))},
+            {"tarball", std::make_shared<JobStatus>(JobStatus(2))},
+            {"source_build", std::make_shared<JobStatus>(JobStatus(3))},
+            {"upload", std::make_shared<JobStatus>(JobStatus(4))},
+            {"source_check", std::make_shared<JobStatus>(JobStatus(5))},
+            {"build_check", std::make_shared<JobStatus>(JobStatus(6))},
+            {"lintian", std::make_shared<JobStatus>(JobStatus(7))},
+            {"britney", std::make_shared<JobStatus>(JobStatus(8))}
+        }
+    );
+
     _cached_job_statuses = statuses;
     return statuses;
 }

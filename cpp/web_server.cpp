@@ -176,7 +176,7 @@ bool WebServer::start_server(quint16 port) {
     std::shared_ptr<LubuntuCI> lubuntuci = std::make_shared<LubuntuCI>();
     std::vector<std::shared_ptr<PackageConf>> all_repos = lubuntuci->list_known_repos();
     task_queue = std::make_unique<TaskQueue>(10);
-    std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
+    std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses = lubuntuci->cilogic.get_job_statuses();
     task_queue->start();
 
     // Load initial tokens
@@ -219,7 +219,7 @@ bool WebServer::start_server(quint16 port) {
             if (!pkgconf->can_check_source_upload()) { continue; }
 
             task_queue->enqueue(
-                job_statuses.at("source_check"),
+                job_statuses->at("source_check"),
                 [this, proposed](std::shared_ptr<Log> log) mutable {
                     std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
                     std::string package_version = pkgconf->upstream_version + "-0ubuntu0~ppa" + std::to_string(pkgconf->ppa_revision);
@@ -524,7 +524,7 @@ bool WebServer::start_server(quint16 port) {
                 item["upstream_commit_url"] = upstream_commit_url_str;
 
                 // For each job in the map, fetch the real task and set a CSS class accordingly.
-                for (auto const & [job_name, job_ptr] : job_statuses) {
+                for (auto const & [job_name, job_ptr] : *job_statuses) {
                     auto t = r->get_task_by_jobstatus(job_ptr);
                     if (t) {
                         std::string css_class = "bg-secondary";  // default
@@ -901,8 +901,6 @@ bool WebServer::start_server(quint16 port) {
             std::set<std::shared_ptr<Task>, Task::TaskComparator> final_tasks;
             std::string title_prefix;
 
-            static const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses = lubuntuci->cilogic.get_job_statuses();
-
             if (type.empty()) {
                 // default to 'running'
                 title_prefix = "Running";
@@ -916,7 +914,7 @@ bool WebServer::start_server(quint16 port) {
                 std::vector<std::shared_ptr<Task>> tasks_vector;
                 auto pkgconfs = lubuntuci->cilogic.get_packageconfs();
                 for (auto &pkgconf : pkgconfs) {
-                    for (auto &j : job_statuses) {
+                    for (auto &j : *job_statuses) {
                         if (!j.second) {
                             continue;
                         }

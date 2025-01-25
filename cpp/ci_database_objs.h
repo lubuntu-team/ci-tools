@@ -157,7 +157,7 @@ public:
 
     PackageConf(int id = 0, std::shared_ptr<Package> package = NULL, std::shared_ptr<Release> release = NULL, std::shared_ptr<Branch> branch = NULL,
                 std::shared_ptr<GitCommit> packaging_commit = NULL, std::shared_ptr<GitCommit> upstream_commit = NULL);
-    std::vector<std::shared_ptr<PackageConf>> get_package_confs(std::map<std::string, std::shared_ptr<JobStatus>> jobstatus_map);
+    std::vector<std::shared_ptr<PackageConf>> get_package_confs(std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> jobstatus_map);
     std::vector<std::shared_ptr<PackageConf>> get_package_confs_by_package_name(std::vector<std::shared_ptr<PackageConf>> packageconfs,
                                                                                 const std::string& package_name);
     void assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_ptr<Task> task_ptr, std::weak_ptr<PackageConf> packageconf_ptr);
@@ -212,7 +212,7 @@ public:
     Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_ptr<PackageConf> packageconf);
     Task();
 
-    std::set<std::shared_ptr<Task>> get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::map<std::string, std::shared_ptr<JobStatus>> job_statuses, int page, int per_page);
+    std::set<std::shared_ptr<Task>> get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses, int page, int per_page);
     void save(int _packageconf_id = 0);
 
     std::shared_ptr<PackageConf> get_parent_packageconf() const {
