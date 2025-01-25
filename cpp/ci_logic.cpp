@@ -818,6 +818,13 @@ bool CiLogic::pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<L
 
     // Now read the HEAD commits and store them
     log->append("Fetching complete. Storing Git commit data...\n");
+    if (!proj->packaging_commit) {
+        proj->packaging_commit = std::make_unique<GitCommit>();
+    }
+
+    if (!proj->upstream_commit) {
+        proj->upstream_commit = std::make_unique<GitCommit>();
+    }
     *proj->packaging_commit = get_commit_from_pkg_repo(packaging_dir.string(), log);
     *proj->upstream_commit = get_commit_from_pkg_repo(upstream_dir.string(), log);
     proj->sync();
