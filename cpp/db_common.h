@@ -19,5 +19,6 @@
 #include <QSqlDatabase>
 
 QSqlDatabase get_thread_connection();
+bool init_database(const QString& database_path);
 
 #endif // DB_COMMON_H

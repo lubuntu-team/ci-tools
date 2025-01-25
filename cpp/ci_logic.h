@@ -103,10 +103,6 @@ class CiLogic {
         std::vector<Branch> branches;
 
     private:
-        // Initialize the database
-        bool init_database(const QString& connectionName = "LubuntuCIConnection",
-                           const QString& databasePath = "/srv/lubuntu-ci/repos/ci-tools/lubuntu_ci.db");
-
         void debuild_package(const fs::path &packaging_dir, std::shared_ptr<Log> log);
 
         QSqlDatabase p_db;

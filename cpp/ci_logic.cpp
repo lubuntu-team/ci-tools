@@ -18,6 +18,7 @@
 #include "lubuntuci_lib.h"
 #include "common.h"
 #include "utilities.h"
+#include "db_common.h"
 
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
@@ -274,157 +275,6 @@ YAML::Node CiLogic::load_yaml_config(const fs::path &config_path) {
 }
 
 /**
- * init_database():
- *   If the DB connection name is known, reuse it. Otherwise, create it.
- */
-bool CiLogic::init_database(const QString& connectionName, const QString& databasePath) {
-    // Initialize the base connection in the main thread
-    if (QSqlDatabase::contains(connectionName)) {
-        QSqlDatabase::removeDatabase(connectionName);
-    }
-
-    QSqlDatabase baseDb = QSqlDatabase::addDatabase("QSQLITE", connectionName);
-    baseDb.setDatabaseName(databasePath);
-
-    if (!baseDb.open()) {
-        log_error("Cannot open database: " + baseDb.lastError().text().toStdString());
-        return false;
-    }
-
-    // Apply PRAGMAs
-    QSqlQuery pragmaQuery(baseDb);
-    pragmaQuery.exec("PRAGMA journal_mode = WAL;");
-    pragmaQuery.exec("PRAGMA synchronous = NORMAL;");
-    pragmaQuery.exec("PRAGMA foreign_keys = ON;");
-
-    // Run the schema creation (or migration) statements
-    QStringList sqlStatements = QString(R"(
-        CREATE TABLE IF NOT EXISTS person (
-            id INTEGER PRIMARY KEY,
-            username TEXT NOT NULL,
-            logo_url TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS person_token (
-            id INTEGER PRIMARY KEY,
-            person_id INTEGER NOT NULL,
-            token TEXT NOT NULL,
-            expiry_date TEXT NOT NULL,
-            FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS package (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            large INTEGER NOT NULL DEFAULT 0,
-            upstream_url TEXT NOT NULL,
-            packaging_branch TEXT NOT NULL,
-            packaging_url TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS release (
-            id INTEGER PRIMARY KEY,
-            version INTEGER NOT NULL UNIQUE,
-            codename TEXT NOT NULL UNIQUE,
-            isDefault INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS branch (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            upload_target TEXT NOT NULL,
-            upload_target_ssh TEXT NOT NULL
-        );
-
-        INSERT INTO branch (name, upload_target, upload_target_ssh)
-            SELECT 'unstable', 'ppa:lubuntu-ci/unstable-ci-proposed', 'ssh-ppa:lubuntu-ci/unstable-ci-proposed'
-            WHERE NOT EXISTS (SELECT 1 FROM branch WHERE name='unstable');
-
-        CREATE TABLE IF NOT EXISTS git_commit (
-            id INTEGER PRIMARY KEY,
-            commit_hash TEXT NOT NULL,
-            commit_summary TEXT NOT NULL,
-            commit_message TEXT NOT NULL,
-            commit_datetime DATETIME NOT NULL,
-            commit_author TEXT NOT NULL,
-            commit_committer TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS packageconf (
-            id INTEGER PRIMARY KEY,
-            upstream_version TEXT,
-            ppa_revision INTEGER,
-            package_id INTEGER NOT NULL,
-            release_id INTEGER NOT NULL,
-            branch_id INTEGER NOT NULL,
-            packaging_commit_id INTEGER,
-            upstream_commit_id INTEGER,
-            FOREIGN KEY (package_id) REFERENCES package(id) ON DELETE CASCADE,
-            FOREIGN KEY (release_id) REFERENCES release(id) ON DELETE CASCADE,
-            FOREIGN KEY (branch_id) REFERENCES branch(id) ON DELETE CASCADE,
-            FOREIGN KEY (packaging_commit_id) REFERENCES git_commit(id) ON DELETE CASCADE,
-            FOREIGN KEY (upstream_commit_id) REFERENCES git_commit(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS jobstatus (
-            id INTEGER PRIMARY KEY,
-            build_score INTEGER NOT NULL,
-            name TEXT NOT NULL UNIQUE,
-            display_name TEXT NOT NULL
-        );
-
-        INSERT OR IGNORE INTO jobstatus (build_score, name, display_name)
-            VALUES
-                (80, 'pull', 'Pull'),
-                (70, 'tarball', 'Create Tarball'),
-                (60, 'source_build', 'Source Build'),
-                (50, 'upload', 'Upload'),
-                (40, 'source_check', 'Source Check'),
-                (30, 'build_check', 'Build Check'),
-                (20, 'lintian', 'Lintian'),
-                (10, 'britney', 'Britney');
-
-        CREATE TABLE IF NOT EXISTS task (
-            id INTEGER PRIMARY KEY,
-            packageconf_id INTEGER NOT NULL,
-            jobstatus_id INTEGER NOT NULL,
-            queue_time INTEGER DEFAULT 0,
-            start_time INTEGER DEFAULT 0,
-            finish_time INTEGER DEFAULT 0,
-            successful INTEGER,
-            log TEXT,
-            FOREIGN KEY (packageconf_id) REFERENCES packageconf(id),
-            FOREIGN KEY (jobstatus_id) REFERENCES jobstatus(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS packageconf_jobstatus_id (
-            id INTEGER PRIMARY KEY,
-            packageconf_id INTEGER NOT NULL,
-            jobstatus_id INTEGER NOT NULL,
-            task_id INTEGER NOT NULL,
-            FOREIGN KEY (packageconf_id) REFERENCES packageconf(id),
-            FOREIGN KEY (jobstatus_id) REFERENCES jobstatus(id),
-            FOREIGN KEY (task_id) REFERENCES task(id)
-        );
-
-    )").split(';', Qt::SkipEmptyParts);
-
-    {
-        QSqlQuery query(baseDb);
-        for (const QString &statement : sqlStatements) {
-            QString trimmed = statement.trimmed();
-            if (!trimmed.isEmpty() && !query.exec(trimmed)) {
-                std::cout << "Failed to execute SQL: " << trimmed.toStdString()
-                          << "\nError: " << query.lastError().text().toStdString() << "\n";
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-/**
  * init_global():
  *   1. Reads all *.yaml in /srv/lubuntu-ci/repos/ci-tools/configs/
  *   2. Merges them into g_config.
@@ -438,7 +288,7 @@ void CiLogic::init_global() {
     Release _tmp_rel;
 
     ensure_git_inited();
-    if (!init_database()) return;
+    if (!init_database("/srv/lubuntu-ci/repos/ci-tools/lubuntu_ci.db")) return;
 
     if (branches.empty() || packages.empty() || releases.empty() || packageconfs.empty()) {
         YAML::Node g_config;
