@@ -95,11 +95,11 @@ void TaskQueue::worker_thread() {
             bool found_valid = false;
             // Iterate through the set until a valid task is found
             while (it != tasks_.end()) {
-                std::lock_guard<std::mutex> lock(running_pkgconfs_mutex_);
                 std::shared_ptr<Task> it_task = *it;
                 task_to_execute = it_task;
-
                 int pkgconf_id = task_to_execute->get_parent_packageconf()->id;
+
+                std::lock_guard<std::mutex> lock(running_pkgconfs_mutex_);
                 auto running_pkgconf_it = std::find_if(running_pkgconfs_.begin(), running_pkgconfs_.end(),
                     [&pkgconf_id](const std::shared_ptr<PackageConf>& pkgconf) { return pkgconf->id == pkgconf_id; });
 
@@ -116,13 +116,16 @@ void TaskQueue::worker_thread() {
             if (!found_valid) { continue; }
         }
 
-        if (!task_to_execute || !task_to_execute->func) {
-            continue;
-        } else {
-            std::lock_guard<std::mutex> pkgconfslock(running_pkgconfs_mutex_);
-            running_pkgconfs_.insert(task_to_execute->get_parent_packageconf());
-            std::lock_guard<std::mutex> tasks_lock(running_tasks_mutex_);
-            running_tasks_.insert(task_to_execute);
+        if (!task_to_execute || !task_to_execute->func) continue;
+        else {
+            {
+                std::lock_guard<std::mutex> pkgconfslock(running_pkgconfs_mutex_);
+                running_pkgconfs_.insert(task_to_execute->get_parent_packageconf());
+            }
+            {
+                std::lock_guard<std::mutex> tasks_lock(running_tasks_mutex_);
+                running_tasks_.insert(task_to_execute);
+            }
         }
 
         // Set the start time
