@@ -11,6 +11,6 @@ rm -rf build)
 
 (cd cpp &&
 rm -rf build; mkdir build && (cd build &&
-cmake .. -DCMAKE_PREFIX_PATH="/srv/lubuntu-ci/repos/ci-tools;${CMAKE_PREFIX_PATH}" &&
+cmake .. -DCMAKE_PREFIX_PATH="/srv/lubuntu-ci/repos/ci-tools${CMAKE_PREFIX_PATH:+;${CMAKE_PREFIX_PATH}}" &&
 make -j$(nproc) && cmake --install . --prefix /srv/lubuntu-ci/repos/ci-tools) &&
 rm -rf build)
