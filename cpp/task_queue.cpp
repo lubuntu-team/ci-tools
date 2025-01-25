@@ -89,10 +89,7 @@ void TaskQueue::worker_thread() {
         std::shared_ptr<Task> task_to_execute;
         {
             std::lock_guard<std::mutex> tasks_lock(tasks_mutex_);
-
-            if (stop_ && tasks_.empty()) {
-                return; // Exit thread if stopping and no tasks left
-            }
+            if (stop_ && tasks_.empty()) return;
 
             auto it = tasks_.begin();
             bool found_valid = false;
