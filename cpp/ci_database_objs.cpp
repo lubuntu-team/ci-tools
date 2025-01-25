@@ -1227,18 +1227,19 @@ std::set<std::shared_ptr<Task>> Task::get_completed_tasks(QSqlDatabase& p_db, st
 }
 
 void Task::save(QSqlDatabase& p_db, int _packageconf_id) {
-    QSqlQuery query(p_db);
-    query.prepare("UPDATE task SET jobstatus_id = ?, queue_time = ?, start_time = ?, finish_time = ?, successful = ?, log = ? WHERE id = ?");
-    query.addBindValue(jobstatus->id);
-    query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(queue_time)));
-    query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(start_time)));
-    query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(finish_time)));
-    query.addBindValue(successful);
-    query.addBindValue(QString::fromStdString(std::regex_replace(log->get(), std::regex(R"(^\s+)"), "")));
-    query.addBindValue(id);
-    if (!query.exec()) {
-        qDebug() << "Failed to save task to database:" << query.lastError().text();
-        return;
+    task_succeeded = false;
+    while (!task_succeeded) {
+        QSqlQuery query(p_db);
+        query.prepare("UPDATE task SET jobstatus_id = ?, queue_time = ?, start_time = ?, finish_time = ?, successful = ?, log = ? WHERE id = ?");
+        query.addBindValue(jobstatus->id);
+        query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(queue_time)));
+        query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(start_time)));
+        query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(finish_time)));
+        query.addBindValue(successful);
+        query.addBindValue(QString::fromStdString(std::regex_replace(log->get(), std::regex(R"(^\s+)"), "")));
+        query.addBindValue(id);
+        task_succeeded = query.exec();
+        if (!task_succeeded) qDebug() << "Failed to save task to database, retrying:" << query.lastError().text();
     }
 
     QSqlQuery link_query(p_db);
