@@ -1228,6 +1228,7 @@ std::set<std::shared_ptr<Task>> Task::get_completed_tasks(QSqlDatabase& p_db, st
 
 void Task::save(QSqlDatabase& p_db, int _packageconf_id) {
     bool task_succeeded = false;
+    int attempt = 0;
     while (!task_succeeded) {
         QSqlQuery query(p_db);
         query.prepare("UPDATE task SET jobstatus_id = ?, queue_time = ?, start_time = ?, finish_time = ?, successful = ?, log = ? WHERE id = ?");
@@ -1239,7 +1240,11 @@ void Task::save(QSqlDatabase& p_db, int _packageconf_id) {
         query.addBindValue(QString::fromStdString(std::regex_replace(log->get(), std::regex(R"(^\s+)"), "")));
         query.addBindValue(id);
         task_succeeded = query.exec();
-        if (!task_succeeded) qDebug() << "Failed to save task to database, retrying:" << query.lastError().text();
+        if (!task_succeeded) {
+            qDebug() << "Failed to save task to database, retrying:" << query.lastError().text();
+            int delay = 1000 * static_cast<int>(std::pow(2, attempt - 1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        }
     }
 
     QSqlQuery link_query(p_db);
