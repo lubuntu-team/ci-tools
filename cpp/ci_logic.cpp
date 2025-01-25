@@ -1146,27 +1146,27 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                 continue;
             }
 
+            std::shared_ptr<Task> tarball_task = std::make_shared<Task>();
             task_queue->enqueue(
                 job_statuses.at("pull"),
-                [this](std::shared_ptr<Log> log) mutable {
+                [this, r, &task_queue, tarball_task, job_statuses](std::shared_ptr<Log> log) mutable {
                     std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                    bool pull_ok = pull_project(pkgconf, log);
+                    if (pull_project(pkgconf, log)) {
+                        task_queue->enqueue(
+                            job_statuses.at("tarball"),
+                            [this, r](std::shared_ptr<Log> log) mutable {
+                                bool tarball_ok = create_project_tarball(r, log);
+                            },
+                            r
+                        );
+                        tarball_task = r->get_task_by_jobstatus(job_statuses.at("tarball"));
+                    }
                 },
                 r
             );
 
             new_item->first_pull_task = r->get_task_by_jobstatus(job_statuses.at("pull"));
-
-            task_queue->enqueue(
-                job_statuses.at("tarball"),
-                [this](std::shared_ptr<Log> log) mutable {
-                    std::shared_ptr<PackageConf> pkgconf = log->get_task_context()->get_parent_packageconf();
-                    bool tarball_ok = create_project_tarball(pkgconf, log);
-                },
-                r
-            );
-
-            new_item->first_tarball_task = r->get_task_by_jobstatus(job_statuses.at("tarball"));
+            new_item->first_tarball_task = tarball_task;
             new_item->first_pkgconf = r;
 
             new_item->packaging_commit = r->packaging_commit;
