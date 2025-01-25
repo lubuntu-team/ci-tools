@@ -46,9 +46,9 @@ public:
     bool isDefault;
 
     Release(int id = 0, int version = 0, const std::string& codename = "", bool isDefault = false);
-    std::vector<Release> get_releases(QSqlDatabase& p_db);
-    Release get_release_by_id(QSqlDatabase& p_db, int id);
-    bool set_releases(QSqlDatabase& p_db, YAML::Node& releases);
+    std::vector<Release> get_releases();
+    Release get_release_by_id(int id);
+    bool set_releases(YAML::Node& releases);
 };
 
 class Package {
@@ -63,9 +63,9 @@ public:
     std::string packaging_url;
 
     Package(int id = 0, const std::string& name = "", bool large = false, const std::string& upstream_url = "", const std::string& packaging_branch = "", const std::string& packaging_url = "");
-    std::vector<Package> get_packages(QSqlDatabase& p_db);
-    Package get_package_by_id(QSqlDatabase& p_db, int id);
-    bool set_packages(QSqlDatabase& p_db, YAML::Node& packages);
+    std::vector<Package> get_packages();
+    Package get_package_by_id(int id);
+    bool set_packages(YAML::Node& packages);
 
 private:
     std::string transform_url(const std::string& url);
@@ -79,8 +79,8 @@ public:
     std::string upload_target_ssh;
 
     Branch(int id = 0, const std::string& name = "", const std::string& upload_target = "", const std::string& upload_target_ssh = "");
-    std::vector<Branch> get_branches(QSqlDatabase& p_db);
-    Branch get_branch_by_id(QSqlDatabase& p_db, int id);
+    std::vector<Branch> get_branches();
+    Branch get_branch_by_id(int id);
 };
 
 class GitCommit {
@@ -94,7 +94,6 @@ public:
     std::string commit_committer;
 
     GitCommit(
-        QSqlDatabase& p_db,
         const std::string& commit_hash = "",
         const std::string& commit_summary = "",
         const std::string& commit_message = "",
@@ -103,7 +102,7 @@ public:
         const std::string& commit_committer = ""
     );
     GitCommit(
-        const int id = 0,
+        const int id,
         const std::string& commit_hash = "",
         const std::string& commit_summary = "",
         const std::string& commit_message = "",
@@ -112,8 +111,8 @@ public:
         const std::string& commit_committer = ""
     );
 
-    GitCommit get_commit_by_id(QSqlDatabase& p_db, int id);
-    std::optional<GitCommit> get_commit_by_hash(QSqlDatabase& p_db, const std::string commit_hash);
+    GitCommit get_commit_by_id(int id);
+    std::optional<GitCommit> get_commit_by_hash(const std::string commit_hash);
 
 private:
     std::chrono::zoned_time<std::chrono::seconds> convert_timestr_to_zonedtime(const std::string& datetime_str);
@@ -126,7 +125,7 @@ public:
     std::string name;
     std::string display_name;
 
-    JobStatus(QSqlDatabase& p_db, int id);
+    JobStatus(int id);
 };
 
 class PackageConf {
@@ -158,18 +157,17 @@ public:
 
     PackageConf(int id = 0, std::shared_ptr<Package> package = NULL, std::shared_ptr<Release> release = NULL, std::shared_ptr<Branch> branch = NULL,
                 std::shared_ptr<GitCommit> packaging_commit = NULL, std::shared_ptr<GitCommit> upstream_commit = NULL);
-    std::vector<std::shared_ptr<PackageConf>> get_package_confs(QSqlDatabase& p_db, std::map<std::string, std::shared_ptr<JobStatus>> jobstatus_map);
-    std::vector<std::shared_ptr<PackageConf>> get_package_confs_by_package_name(QSqlDatabase& p_db,
-                                                                                std::vector<std::shared_ptr<PackageConf>> packageconfs,
+    std::vector<std::shared_ptr<PackageConf>> get_package_confs(std::map<std::string, std::shared_ptr<JobStatus>> jobstatus_map);
+    std::vector<std::shared_ptr<PackageConf>> get_package_confs_by_package_name(std::vector<std::shared_ptr<PackageConf>> packageconfs,
                                                                                 const std::string& package_name);
     void assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_ptr<Task> task_ptr, std::weak_ptr<PackageConf> packageconf_ptr);
     int successful_task_count();
     int total_task_count();
     std::shared_ptr<Task> get_task_by_jobstatus(std::shared_ptr<JobStatus> jobstatus);
-    bool set_package_confs(QSqlDatabase& p_db);
+    bool set_package_confs();
     bool set_commit_id(const std::string& _commit_id = "");
     bool set_commit_time(const std::chrono::zoned_time<std::chrono::seconds>& _commit_time = std::chrono::zoned_time<std::chrono::seconds>{});
-    void sync(QSqlDatabase& p_db);
+    void sync();
     bool can_check_source_upload();
     bool can_check_builds();
 
@@ -211,11 +209,11 @@ public:
     std::weak_ptr<PackageConf> parent_packageconf;
     bool is_running;
 
-    Task(QSqlDatabase& p_db, std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_ptr<PackageConf> packageconf);
+    Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_ptr<PackageConf> packageconf);
     Task();
 
-    std::set<std::shared_ptr<Task>> get_completed_tasks(QSqlDatabase& p_db, std::vector<std::shared_ptr<PackageConf>> packageconfs, std::map<std::string, std::shared_ptr<JobStatus>> job_statuses, int page, int per_page);
-    void save(QSqlDatabase& p_db, int _packageconf_id = 0);
+    std::set<std::shared_ptr<Task>> get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::map<std::string, std::shared_ptr<JobStatus>> job_statuses, int page, int per_page);
+    void save(int _packageconf_id = 0);
 
     std::shared_ptr<PackageConf> get_parent_packageconf() const {
         return parent_packageconf.lock();

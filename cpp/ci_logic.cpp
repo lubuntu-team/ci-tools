@@ -67,32 +67,6 @@ static void merge_yaml_nodes(YAML::Node &master, const YAML::Node &partial) {
     }
 }
 
-QSqlDatabase CiLogic::get_thread_connection() {
-    std::lock_guard<std::mutex> lock(connection_mutex_);
-    thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
-    QString connectionName = QString("LubuntuCIConnection_%1").arg(thread_unique_id);
-
-    // Check if the connection already exists for this thread
-    if (QSqlDatabase::contains(connectionName)) {
-        QSqlDatabase db = QSqlDatabase::database(connectionName);
-        if (!db.isOpen()) {
-            if (!db.open()) {
-                throw std::runtime_error("Failed to open thread-specific database connection: " + db.lastError().text().toStdString());
-            }
-        }
-        return db;
-    }
-
-    QSqlDatabase threadDb = QSqlDatabase::addDatabase("QSQLITE", connectionName);
-    threadDb.setDatabaseName("/srv/lubuntu-ci/repos/ci-tools/lubuntu_ci.db");
-
-    if (!threadDb.open()) {
-        throw std::runtime_error("Failed to open new database connection for thread: " + threadDb.lastError().text().toStdString());
-    }
-
-    return threadDb;
-}
-
 // This returns the following information about a commit:
 //  1) commit_hash
 //  2) commit_summary
@@ -100,7 +74,7 @@ QSqlDatabase CiLogic::get_thread_connection() {
 //  4) commit_datetime
 //  5) commit_author
 //  6) commit_committer
-GitCommit get_commit_from_pkg_repo(QSqlDatabase& p_db, const std::string& repo_name, std::shared_ptr<Log> log) {
+GitCommit get_commit_from_pkg_repo(const std::string& repo_name, std::shared_ptr<Log> log) {
     // Ensure libgit2 is initialized
     ensure_git_inited();
 
@@ -245,7 +219,6 @@ GitCommit get_commit_from_pkg_repo(QSqlDatabase& p_db, const std::string& repo_n
 
         // Construct and return the GitCommit object with collected data
         GitCommit git_commit_instance(
-            p_db,
             commit_hash,
             current_summary, // Use the current commit summary
             commit_message,
@@ -255,7 +228,7 @@ GitCommit get_commit_from_pkg_repo(QSqlDatabase& p_db, const std::string& repo_n
         );
 
         // Check if the commit already exists in the DB
-        auto existing_commit = _tmp_commit.get_commit_by_hash(p_db, commit_hash);
+        auto existing_commit = _tmp_commit.get_commit_by_hash(commit_hash);
         if (existing_commit) {
             found_valid_commit = true;
             // Cleanup revwalk and repository before returning
@@ -517,35 +490,30 @@ void CiLogic::init_global() {
 
         // Set the packages in the DB
         YAML::Node yaml_packages = g_config["packages"];
-        auto connection = get_thread_connection();
-        if (!_tmp_pkg.set_packages(connection, yaml_packages)) {
+        if (!_tmp_pkg.set_packages(yaml_packages)) {
             log_error("Failed to set packages.");
         }
-        packages = _tmp_pkg.get_packages(connection);
+        packages = _tmp_pkg.get_packages();
 
         // Set the releases in the DB
         YAML::Node yaml_releases = g_config["releases"];
-        connection = get_thread_connection();
-        if (!_tmp_rel.set_releases(connection, yaml_releases)) {
+        if (!_tmp_rel.set_releases(yaml_releases)) {
             log_error("Failed to set releases.");
         }
-        connection = get_thread_connection();
-        releases = _tmp_rel.get_releases(connection);
+        releases = _tmp_rel.get_releases();
 
         // Add missing packageconf entries
-        connection = get_thread_connection();
-        if (!_tmp_pkg_conf.set_package_confs(connection)) {
+        if (!_tmp_pkg_conf.set_package_confs()) {
             log_error("Failed to set package configurations.");
         }
-        set_packageconfs(_tmp_pkg_conf.get_package_confs(connection, get_job_statuses()));
+        set_packageconfs(_tmp_pkg_conf.get_package_confs(get_job_statuses()));
 
         // Finally, store the branches
-            connection = get_thread_connection();
-            if (branches.empty()) {
-                branches = _tmp_brnch.get_branches(connection);
-            }
+        if (branches.empty()) {
+            branches = _tmp_brnch.get_branches();
         }
     }
+}
 
 /**
  * Convert a YAML node to CiProject
@@ -1000,12 +968,9 @@ bool CiLogic::pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<L
 
     // Now read the HEAD commits and store them
     log->append("Fetching complete. Storing Git commit data...\n");
-    auto connection = get_thread_connection();
-    *proj->packaging_commit = get_commit_from_pkg_repo(connection, packaging_dir.string(), log);
-    connection = get_thread_connection();
-    *proj->upstream_commit = get_commit_from_pkg_repo(connection, upstream_dir.string(), log);
-    connection = get_thread_connection();
-    proj->sync(connection);
+    *proj->packaging_commit = get_commit_from_pkg_repo(packaging_dir.string(), log);
+    *proj->upstream_commit = get_commit_from_pkg_repo(upstream_dir.string(), log);
+    proj->sync();
 
     log->append("Done!");
     return true;
@@ -1362,16 +1327,15 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
 std::map<std::string, std::shared_ptr<JobStatus>> CiLogic::get_job_statuses() {
     if (!_cached_job_statuses.empty()) { return _cached_job_statuses; }
 
-    auto connection = get_thread_connection();
     static const std::map<std::string, std::shared_ptr<JobStatus>> statuses = {
-        {"pull", std::make_shared<JobStatus>(JobStatus(connection, 1))},
-        {"tarball", std::make_shared<JobStatus>(JobStatus(connection, 2))},
-        {"source_build", std::make_shared<JobStatus>(JobStatus(connection, 3))},
-        {"upload", std::make_shared<JobStatus>(JobStatus(connection, 4))},
-        {"source_check", std::make_shared<JobStatus>(JobStatus(connection, 5))},
-        {"build_check", std::make_shared<JobStatus>(JobStatus(connection, 6))},
-        {"lintian", std::make_shared<JobStatus>(JobStatus(connection, 7))},
-        {"britney", std::make_shared<JobStatus>(JobStatus(connection, 8))}
+        {"pull", std::make_shared<JobStatus>(JobStatus(1))},
+        {"tarball", std::make_shared<JobStatus>(JobStatus(2))},
+        {"source_build", std::make_shared<JobStatus>(JobStatus(3))},
+        {"upload", std::make_shared<JobStatus>(JobStatus(4))},
+        {"source_check", std::make_shared<JobStatus>(JobStatus(5))},
+        {"build_check", std::make_shared<JobStatus>(JobStatus(6))},
+        {"lintian", std::make_shared<JobStatus>(JobStatus(7))},
+        {"britney", std::make_shared<JobStatus>(JobStatus(8))}
     };
     _cached_job_statuses = statuses;
     return statuses;
@@ -1412,8 +1376,7 @@ void CiLogic::set_packageconfs(std::vector<std::shared_ptr<PackageConf>> _pkgcon
 
 void CiLogic::sync(std::shared_ptr<PackageConf> pkgconf) {
     std::lock_guard<std::mutex> lock(packageconfs_mutex_);
-    auto connection = get_thread_connection();
-    pkgconf->sync(connection);
+    pkgconf->sync();
 }
 
 /**

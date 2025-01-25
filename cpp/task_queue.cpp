@@ -26,45 +26,16 @@ TaskQueue::~TaskQueue() {
     stop();
 }
 
-// FIXME: copy of CiLogic::get_thread_connection()
-std::atomic<unsigned int> TaskQueue::thread_id_counter{1200};
-QSqlDatabase TaskQueue::get_thread_connection() {
-    std::lock_guard<std::mutex> lock(connection_mutex_);
-    thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
-    QString connectionName = QString("LubuntuCIConnection_%1").arg(thread_unique_id);
-
-    // Check if the connection already exists for this thread
-    if (QSqlDatabase::contains(connectionName)) {
-        QSqlDatabase db = QSqlDatabase::database(connectionName);
-        if (!db.isOpen()) {
-            if (!db.open()) {
-                throw std::runtime_error("Failed to open thread-specific database connection: " + db.lastError().text().toStdString());
-            }
-        }
-        return db;
-    }
-
-    QSqlDatabase threadDb = QSqlDatabase::addDatabase("QSQLITE", connectionName);
-    threadDb.setDatabaseName("/srv/lubuntu-ci/repos/ci-tools/lubuntu_ci.db");
-
-    if (!threadDb.open()) {
-        throw std::runtime_error("Failed to open new database connection for thread: " + threadDb.lastError().text().toStdString());
-    }
-
-    return threadDb;
-}
-
 void TaskQueue::enqueue(std::shared_ptr<JobStatus> jobstatus,
                         std::function<void(std::shared_ptr<Log> log)> task_func,
                         std::shared_ptr<PackageConf> packageconf) {
     {
-        auto connection = get_thread_connection();
         auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch())
                        .count();
 
         // Create the task
-        std::shared_ptr<Task> task_ptr = std::make_shared<Task>(connection, jobstatus, now, packageconf);
+        std::shared_ptr<Task> task_ptr = std::make_shared<Task>(jobstatus, now, packageconf);
         task_ptr->func = [task_func, self_weak = std::weak_ptr<Task>(task_ptr)](std::shared_ptr<Log> log) {
             std::shared_ptr<Task> task_locked = self_weak.lock();
             if (task_locked) {
@@ -163,8 +134,7 @@ void TaskQueue::worker_thread() {
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
             task_to_execute->start_time = now;
-            auto connection = get_thread_connection();
-            task_to_execute->save(connection, 0);
+            task_to_execute->save(0);
         }
 
         try {
@@ -186,8 +156,7 @@ void TaskQueue::worker_thread() {
                       std::chrono::system_clock::now().time_since_epoch())
                       .count();
             task_to_execute->finish_time = now;
-            auto connection = get_thread_connection();
-            task_to_execute->save(connection, 0);
+            task_to_execute->save(0);
         }
 
         {

@@ -39,6 +39,7 @@ add_library(lubuntuci_lib SHARED
     web_server.cpp
     sources_parser.cpp
     naive_bayes_classifier.cpp
+    db_common.cpp
 )
 
 target_include_directories(lubuntuci_lib PUBLIC

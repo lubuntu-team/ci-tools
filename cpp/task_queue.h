@@ -53,12 +53,9 @@ private:
     std::condition_variable cv_;
     bool stop_;
     std::vector<std::thread> workers_;
-    static std::atomic<unsigned int> thread_id_counter;
-    mutable std::mutex connection_mutex_;
     int max_worker_id = 1;
 
     void worker_thread();
-    QSqlDatabase get_thread_connection();
 };
 
 #endif // TASK_QUEUE_H

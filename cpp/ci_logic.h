@@ -13,9 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// cpp/ci_logic.h
-// [License Header as in original]
-
 #ifndef CI_LOGIC_H
 #define CI_LOGIC_H
 
@@ -97,8 +94,6 @@ class CiLogic {
         void set_packageconfs(std::vector<std::shared_ptr<PackageConf>> _pkgconfs);
         void sync(std::shared_ptr<PackageConf> pkgconf);
 
-        QSqlDatabase get_thread_connection();
-
         std::string queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
                                        std::unique_ptr<TaskQueue>& task_queue,
                                        const std::map<std::string, std::shared_ptr<JobStatus>> job_statuses);
@@ -116,7 +111,6 @@ class CiLogic {
 
         QSqlDatabase p_db;
 
-        mutable std::mutex connection_mutex_;
         mutable std::mutex packageconfs_mutex_;
         std::vector<std::shared_ptr<PackageConf>> packageconfs;
         std::map<std::string, std::shared_ptr<JobStatus>> _cached_job_statuses;

@@ -17,6 +17,7 @@
 #include "utilities.h"
 #include "sources_parser.h"
 #include "naive_bayes_classifier.h"
+#include "db_common.h"
 
 // Qt includes
 #include <QtHttpServer/QHttpServer>
@@ -171,7 +172,7 @@ bool WebServer::start_server(quint16 port) {
 
     // Load initial tokens
     {
-        QSqlQuery load_tokens(lubuntuci->cilogic.get_thread_connection());
+        QSqlQuery load_tokens(get_thread_connection());
         load_tokens.prepare("SELECT person.id, person.username, person.logo_url, person_token.token, person_token.expiry_date FROM person INNER JOIN person_token ON person.id = person_token.person_id");
         load_tokens.exec();
         while (load_tokens.next()) {
@@ -188,7 +189,7 @@ bool WebServer::start_server(quint16 port) {
     }
 
     expire_tokens_thread_ = std::jthread(run_task_every, 60, [this, lubuntuci] {
-        QSqlQuery expired_tokens(lubuntuci->cilogic.get_thread_connection());
+        QSqlQuery expired_tokens(get_thread_connection());
         QString current_time = QDateTime::currentDateTime().toString(Qt::ISODate);
 
         expired_tokens.prepare("DELETE FROM person_token WHERE expiry_date < :current_time");
@@ -367,7 +368,7 @@ bool WebServer::start_server(quint16 port) {
             if (found_key_bool) {
                 _token_person.remove(found_key);
             } else {
-                QSqlQuery get_person(lubuntuci->cilogic.get_thread_connection());
+                QSqlQuery get_person(get_thread_connection());
                 get_person.prepare("SELECT id, username, logo_url FROM person WHERE username = ?");
                 get_person.bindValue(0, QString::fromStdString(username));
                 if (!get_person.exec()) { qDebug() << "Error executing SELECT query for person:" << get_person.lastError(); }
@@ -376,7 +377,7 @@ bool WebServer::start_server(quint16 port) {
                     person = Person(get_person.value(0).toInt(), get_person.value(1).toString().toStdString(),
                                     get_person.value(2).toString().toStdString());
                 } else {
-                    QSqlQuery insert_person(lubuntuci->cilogic.get_thread_connection());
+                    QSqlQuery insert_person(get_thread_connection());
                     insert_person.prepare("INSERT INTO person (username, logo_url) VALUES (?, ?)");
                     insert_person.bindValue(0, QString::fromStdString(username));
                     insert_person.bindValue(1, QString::fromStdString("https://api.launchpad.net/devel/~" + username + "/logo"));
@@ -395,7 +396,7 @@ bool WebServer::start_server(quint16 port) {
             _active_tokens.insert(token, one_day);
 
             {
-                QSqlQuery insert_token(lubuntuci->cilogic.get_thread_connection());
+                QSqlQuery insert_token(get_thread_connection());
                 insert_token.prepare("INSERT INTO person_token (person_id, token, expiry_date) VALUES (?, ?, ?)");
                 insert_token.bindValue(0, person.id);
                 insert_token.bindValue(1, token);
