@@ -395,6 +395,23 @@ static int submodule_trampoline(git_submodule* sm, const char* name, void* paylo
     return (*callback)(sm, name, payload);
 }
 
+static int progress_cb(const git_indexer_progress *stats, void *payload) {
+    if (stats->total_objects == 0) return 0;
+
+    // Calculate percentage
+    int pct = static_cast<int>((static_cast<double>(stats->received_objects) / stats->total_objects) * 100);
+    // 0 <= pct <= 100
+    if (pct > 100) pct = 100;
+    if (pct < 0) pct = 0;
+    std::string progress_str = (pct < 10 ? "0" : "") + std::to_string(pct) + "%";
+
+    // Cast payload back to shared_ptr<Log> and append the percentage
+    auto log = static_cast<std::shared_ptr<Log>*>(payload);
+    (*log)->append(progress_str);
+
+    return 0;
+}
+
 /**
  * clone_or_fetch: clone if needed, else fetch
  */
@@ -413,6 +430,13 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
         if (branch.has_value()) {
             opts.checkout_branch = branch->c_str();
         }
+
+        git_remote_callbacks callbacks = GIT_REMOTE_CALLBACKS_INIT;
+        callbacks.transfer_progress = progress_cb;
+        callbacks.payload = &log;
+        git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+        fetch_opts.callbacks = callbacks;
+        opts.fetch_opts = fetch_opts;
 
         opts.checkout_opts.checkout_strategy |= GIT_CHECKOUT_UPDATE_SUBMODULES;
 
@@ -433,7 +457,13 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
                                      std::string(e && e->message ? e->message : "unknown"));
         }
 
-        if (git_remote_fetch(remote, nullptr, nullptr, nullptr) < 0) {
+        git_remote_callbacks callbacks = GIT_REMOTE_CALLBACKS_INIT;
+        callbacks.transfer_progress = progress_cb;
+        callbacks.payload = &log;
+        git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
+        fetch_opts.callbacks = callbacks;
+
+        if (git_remote_fetch(remote, nullptr, &fetch_opts, nullptr) < 0) {
             const git_error *e = git_error_last();
             git_remote_free(remote);
             git_repository_free(repo);
@@ -557,8 +587,12 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
 
             // Set up update options
             git_submodule_update_options opts = GIT_SUBMODULE_UPDATE_OPTIONS_INIT;
+            git_remote_callbacks callbacks = GIT_REMOTE_CALLBACKS_INIT;
+            callbacks.transfer_progress = progress_cb;
+            callbacks.payload = &log;
             opts.version = GIT_SUBMODULE_UPDATE_OPTIONS_VERSION;
             opts.fetch_opts = GIT_FETCH_OPTIONS_INIT;
+            opts.fetch_opts.callbacks = callbacks;
             opts.fetch_opts.version = GIT_FETCH_OPTIONS_VERSION;
             opts.checkout_opts = GIT_CHECKOUT_OPTIONS_INIT;
             opts.checkout_opts.checkout_strategy = GIT_CHECKOUT_SAFE;
