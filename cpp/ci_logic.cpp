@@ -400,14 +400,15 @@ static int progress_cb(const git_indexer_progress *stats, void *payload) {
 
     // Calculate percentage
     int pct = static_cast<int>((static_cast<double>(stats->received_objects) / stats->total_objects) * 100);
-    // 0 <= pct <= 100
-    if (pct > 100) pct = 100;
-    if (pct < 0) pct = 0;
-    std::string progress_str = (pct < 10 ? "0" : "") + std::to_string(pct) + "%";
+    if (pct % 5 == 0) {
+        // 0 <= pct <= 100
+        if (pct > 100) pct = 100;
+        if (pct < 1) pct = 1;
+        std::string progress_str = (pct < 10 ? "0" : "") + std::to_string(pct) + "%";
 
-    // Cast payload back to shared_ptr<Log> and append the percentage
-    auto log = static_cast<std::shared_ptr<Log>*>(payload);
-    (*log)->append(progress_str);
+        auto log = static_cast<std::shared_ptr<Log>*>(payload);
+        (*log)->append(progress_str);
+    }
 
     return 0;
 }
