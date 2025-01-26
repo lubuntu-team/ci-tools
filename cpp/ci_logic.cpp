@@ -599,18 +599,19 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
             opts.checkout_opts.checkout_strategy = GIT_CHECKOUT_SAFE;
 
             // Update submodule
+            log->append("Updating submodule: " + std::string(name));
             if (git_submodule_update(sm, 1, &opts) != 0) {
                 const git_error* e = git_error_last();
                 log->append("Failed to update submodule " + std::string(name) + ": " +
-                            (e && e->message ? e->message : "unknown") + "\n");
+                            (e && e->message ? e->message : "unknown"));
             } else {
-                log->append("Updated submodule: " + std::string(name) + "\n");
+                log->append("Updated submodule: " + std::string(name));
             }
 
             // Open the submodule repository
             git_repository* subrepo = nullptr;
             if (git_submodule_open(&subrepo, sm) != 0) {
-                log->append("Failed to open submodule repository: " + std::string(name) + "\n");
+                log->append("Failed to open submodule repository: " + std::string(name));
                 return 0; // Continue with other submodules
             }
 
