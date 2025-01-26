@@ -84,6 +84,8 @@ bool init_database(const QString& database_path) {
         ci_query_exec(&pragma_query, "PRAGMA journal_mode = WAL;");
         ci_query_exec(&pragma_query, "PRAGMA synchronous = NORMAL;");
         ci_query_exec(&pragma_query, "PRAGMA foreign_keys = ON;");
+        ci_query_exec(&pragma_query, "PRAGMA wal_checkpoint(TRUNCATE);");
+        ci_query_exec(&pragma_query, "VACUUM;");
     }
 
     // Run the schema creation (or migration) statements
