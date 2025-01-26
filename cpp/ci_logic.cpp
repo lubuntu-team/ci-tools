@@ -424,11 +424,29 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
     ensure_git_inited();
 
     // Use proxy settings via env var if they exist
-    const char* proxy = repo_url.rfind("https", 0) == 0 ? std::getenv("HTTPS_PROXY") : std::getenv("HTTP_PROXY");
+    bool proxy = false;
     git_proxy_options proxy_opts = GIT_PROXY_OPTIONS_INIT;
-    if (proxy) {
-        proxy_opts.type = GIT_PROXY_SPECIFIED;
-        proxy_opts.url = proxy;
+    {
+        const char* tmp_proxy = repo_url.rfind("https", 0) == 0 ? std::getenv("HTTPS_PROXY") : std::getenv("HTTP_PROXY");
+        if (tmp_proxy) {
+            const char* no_proxy_env = std::getenv("NO_PROXY");
+            if (no_proxy_env) {
+                std::istringstream iss(std::string{no_proxy_env});
+                std::string entry;
+                bool found_no_proxy = false;
+                while (std::getline(iss, entry, ',')) {
+                    if (!entry.empty() && repo_url.contains(entry)) {
+                        found_no_proxy = true;
+                        break;
+                    }
+                }
+                proxy = !found_no_proxy;
+            } else {
+                proxy = true;
+                proxy_opts.type = GIT_PROXY_SPECIFIED;
+                proxy_opts.url = tmp_proxy;
+            }
+        }
     }
 
     git_repository* repo = nullptr;
