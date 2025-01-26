@@ -413,8 +413,6 @@ static int progress_cb(const git_indexer_progress *stats, void *payload) {
     return 0;
 }
 
-static int transport_certificate_check_cb(git_cert *cert, int valid, const char *host, void *payload) { return 0; }
-
 /**
  * clone_or_fetch: clone if needed, else fetch
  */
@@ -431,7 +429,6 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
     if (proxy) {
         proxy_opts.type = GIT_PROXY_SPECIFIED;
         proxy_opts.url = proxy;
-        proxy_opts.certificate_check = transport_certificate_check_cb;
     }
 
     git_repository* repo = nullptr;
