@@ -68,7 +68,7 @@ bool ci_query_exec(QSqlQuery* query, const QString query_string) {
 
         QSqlError error = query->lastError();
         if (error.text().contains("database is locked")) {
-            int delay = 100 * static_cast<int>(std::pow(2, attempt - 1));
+            int delay = 10 * static_cast<int>(std::pow(2, attempt - 1));
             std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         } else break;
     }
