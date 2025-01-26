@@ -443,9 +443,10 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
                 proxy = !found_no_proxy;
             } else {
                 proxy = true;
-                proxy_opts.type = GIT_PROXY_SPECIFIED;
-                proxy_opts.url = tmp_proxy;
             }
+
+            proxy_opts.type = GIT_PROXY_SPECIFIED;
+            proxy_opts.url = tmp_proxy;
         }
     }
 
