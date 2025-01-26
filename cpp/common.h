@@ -33,12 +33,15 @@ private:
     std::string data = "";
     mutable std::shared_mutex lock_;
     std::weak_ptr<Task> task_context_;
+    std::string last_data_str = "";
 
 public:
     void append(const std::string& str) {
         std::unique_lock lock(lock_);
-        if (str.empty()) { return; }
-        data += std::format("[{}] {}", get_current_utc_time("%Y-%m-%dT%H:%M:%SZ"), str.ends_with('\n') ? str : str + '\n');
+        std::string log_str = str.ends_with('\n') ? str : str + '\n';
+        if (str.empty() || last_data_str == log_str) { return; }
+        data += std::format("[{}] {}", get_current_utc_time("%Y-%m-%dT%H:%M:%SZ"), log_str);
+        last_data_str = log_str;
     }
 
     void set_log(const std::string& str) {
