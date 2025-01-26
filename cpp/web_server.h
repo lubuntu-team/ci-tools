@@ -25,7 +25,7 @@
 #include <QMap>
 #include <QSqlDatabase>
 #include <QString>
-#include <QTcpServer>
+#include <QSslServer>
 #include <string>
 
 class WebServer : public QObject {
@@ -41,7 +41,7 @@ private:
     void load_tokens(QSqlDatabase& p_db);
 
     QHttpServer http_server_;
-    QTcpServer tcp_server_;
+    QSslServer ssl_server_;
     std::unique_ptr<TaskQueue> task_queue;
     std::jthread expire_tokens_thread_;
     std::jthread process_sources_thread_;

@@ -23,16 +23,18 @@
 #include <QtHttpServer/QHttpServer>
 #include <QtHttpServer/QHttpServerRequest>
 #include <QtHttpServer/QHttpServerResponse>
-#include <QTcpServer>
+#include <QSslServer>
 #include <QDir>
 #include <QFile>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QDebug>
 #include <QtConcurrent/QtConcurrent>
+#include <QFile>
 #include <QFuture>
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QSslKey>
 
 // C++ includes
 #include <iostream>
@@ -965,13 +967,32 @@ bool WebServer::start_server(quint16 port) {
         });
     });
 
-    // Attempt to listen on `port`
-    if (!tcp_server_.listen(QHostAddress::Any, port) || !http_server_.bind(&tcp_server_)) {
+    {
+        QSslConfiguration ssl_config = QSslConfiguration::defaultConfiguration();
+        QFile cert_file("/srv/lubuntu-ci/repos/ci-tools/server.crt");
+        cert_file.open(QIODevice::ReadOnly);
+        ssl_config.setLocalCertificate(QSslCertificate(&cert_file, QSsl::Pem));
+        cert_file.close();
+        QFile key_file("/srv/lubuntu-ci/repos/ci-tools/server.key");
+        key_file.open(QIODevice::ReadOnly);
+        ssl_config.setPrivateKey(QSslKey(&key_file, QSsl::Rsa, QSsl::Pem));
+        key_file.close();
+
+        ssl_config.setPeerVerifyMode(QSslSocket::VerifyNone);
+        ssl_config.setProtocol(QSsl::TlsV1_3);
+        ssl_server_.setSslConfiguration(ssl_config);
+
+        QHttp2Configuration Http2Conf = QHttp2Configuration();
+        Http2Conf.setServerPushEnabled(true);
+        http_server_.setHttp2Configuration(Http2Conf);
+    }
+
+    if (!ssl_server_.listen(QHostAddress::Any, port) || !http_server_.bind(&ssl_server_)) {
         std::cerr << timestamp_now() << " [ERROR] Could not bind to port " << port << std::endl;
         return false;
     }
 
     std::cout << timestamp_now() << " [INFO] Web server running on port "
-              << tcp_server_.serverPort() << std::endl;
+              << ssl_server_.serverPort() << std::endl;
     return true;
 }
