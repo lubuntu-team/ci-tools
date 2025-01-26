@@ -413,6 +413,8 @@ static int progress_cb(const git_indexer_progress *stats, void *payload) {
     return 0;
 }
 
+static int transport_certificate_check_cb(git_cert *cert, int valid, const char *host, void *payload) { return 0; }
+
 /**
  * clone_or_fetch: clone if needed, else fetch
  */
@@ -422,6 +424,15 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
                              std::shared_ptr<Log> log)
 {
     ensure_git_inited();
+
+    // Use proxy settings via env var if they exist
+    const char* proxy = repo_url.rfind("https", 0) == 0 ? std::getenv("HTTPS_PROXY") : std::getenv("HTTP_PROXY");
+    git_proxy_options proxy_opts = GIT_PROXY_OPTIONS_INIT;
+    if (proxy) {
+        proxy_opts.type = GIT_PROXY_SPECIFIED;
+        proxy_opts.url = proxy;
+        proxy_opts.certificate_check = transport_certificate_check_cb;
+    }
 
     git_repository* repo = nullptr;
     int error = git_repository_open(&repo, repo_dir.c_str());
@@ -437,6 +448,7 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
         callbacks.payload = &log;
         git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
         fetch_opts.callbacks = callbacks;
+        if (proxy) fetch_opts.proxy_opts = proxy_opts;
         opts.fetch_opts = fetch_opts;
 
         opts.checkout_opts.checkout_strategy |= GIT_CHECKOUT_UPDATE_SUBMODULES;
@@ -463,6 +475,7 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
         callbacks.payload = &log;
         git_fetch_options fetch_opts = GIT_FETCH_OPTIONS_INIT;
         fetch_opts.callbacks = callbacks;
+        if (proxy) fetch_opts.proxy_opts = proxy_opts;
 
         if (git_remote_fetch(remote, nullptr, &fetch_opts, nullptr) < 0) {
             const git_error *e = git_error_last();
@@ -595,6 +608,7 @@ void CiLogic::clone_or_fetch(const std::filesystem::path &repo_dir,
             opts.fetch_opts = GIT_FETCH_OPTIONS_INIT;
             opts.fetch_opts.callbacks = callbacks;
             opts.fetch_opts.version = GIT_FETCH_OPTIONS_VERSION;
+            if (proxy) opts.fetch_opts.proxy_opts = proxy_opts;
             opts.checkout_opts = GIT_CHECKOUT_OPTIONS_INIT;
             opts.checkout_opts.checkout_strategy = GIT_CHECKOUT_SAFE;
 
