@@ -1131,10 +1131,10 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
             bool is_ghost_pull = false;
 
             // Attempt to find if we've seen this package->name before
+            std::lock_guard<std::mutex> lock(task_assignment_mutex);
             auto found_it = encountered_items.find(r->package->name);
             std::shared_ptr<package_conf_item> new_item = std::make_shared<package_conf_item>();
             if (found_it != encountered_items.end()) {
-                std::lock_guard<std::mutex> lock(task_assignment_mutex);
                 is_ghost_pull = true;
 
                 r->assign_task(job_statuses->at("pull"), found_it->second->first_pull_task, r);
@@ -1146,7 +1146,6 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                 continue;
             }
 
-            std::shared_ptr<Task> tarball_task = std::make_shared<Task>();
             task_queue->enqueue(
                 job_statuses->at("pull"),
                 [this, r](std::shared_ptr<Log> log) mutable {
