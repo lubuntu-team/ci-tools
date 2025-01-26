@@ -162,6 +162,8 @@ public:
                                                                                 const std::string& package_name);
     void assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_ptr<Task> task_ptr, std::weak_ptr<PackageConf> packageconf_ptr);
     int successful_task_count();
+    int successful_or_pending_task_count();
+    int successful_or_queued_task_count();
     int total_task_count();
     std::shared_ptr<Task> get_task_by_jobstatus(std::shared_ptr<JobStatus> jobstatus);
     bool set_package_confs();

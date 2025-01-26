@@ -678,34 +678,57 @@ int PackageConf::successful_task_count() {
     return successful_count;
 }
 
-int PackageConf::total_task_count() {
-    std::lock_guard<std::mutex> lock(*task_mutex_);
+int PackageConf::successful_or_pending_task_count() {
+    int pending_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (const auto& [job_status, task] : jobstatus_task_map_) {
+            if (task && task->start_time > 0 && task->finish_time == 0) {
+                ++pending_count;
+            }
+        }
+    }
+    return successful_task_count() + pending_count;
+}
 
-    int successful_count = 0;
-    for (const auto& [job_status, task] : jobstatus_task_map_) if (task) ++successful_count;
-    return successful_count;
+int PackageConf::successful_or_queued_task_count() {
+    int queued_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (const auto& [job_status, task] : jobstatus_task_map_) {
+            if (task && task->queue_time > 0 && task->start_time == 0 && task->finish_time == 0) {
+                ++queued_count;
+            }
+        }
+    }
+    return successful_task_count() + queued_count;
+}
+
+int PackageConf::total_task_count() {
+    int total_count = 0;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (const auto& [job_status, task] : jobstatus_task_map_) if (task) ++total_count;
+    }
+    return total_count;
 }
 
 std::shared_ptr<Task> PackageConf::get_task_by_jobstatus(std::shared_ptr<JobStatus> jobstatus) {
-    if (!jobstatus) {
-        throw std::invalid_argument("jobstatus is null");
-    }
+    if (!jobstatus) throw std::invalid_argument("jobstatus is null");
 
-    std::lock_guard<std::mutex> lock(*task_mutex_);
-
-    // Search for the JobStatus in the map
-    auto it = jobstatus_task_map_.find(jobstatus);
-    if (it != jobstatus_task_map_.end()) {
-        return it->second;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        auto it = jobstatus_task_map_.find(jobstatus);
+        if (it != jobstatus_task_map_.end()) {
+            return it->second;
+        }
     }
 
     return nullptr;
 }
 
 void PackageConf::assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_ptr<Task> task_ptr, std::weak_ptr<PackageConf> packageconf_ptr) {
-    if (!jobstatus || !task_ptr) {
-        throw std::invalid_argument("jobstatus or task_ptr is null");
-    }
+    if (!jobstatus || !task_ptr) throw std::invalid_argument("jobstatus or task_ptr is null");
 
     std::lock_guard<std::mutex> lock(*task_mutex_);
     task_ptr->parent_packageconf = task_ptr->parent_packageconf.lock() ? task_ptr->parent_packageconf : packageconf_ptr;
@@ -876,20 +899,23 @@ bool PackageConf::can_check_source_upload() {
     std::int64_t upload_timestamp = 0;
     std::int64_t source_check_timestamp = 0;
     std::set<std::string> valid_successful_statuses = {"pull", "tarball", "source_build", "upload"};
-    for (auto &kv : jobstatus_task_map_) {
-        auto &jobstatus = kv.first;
-        auto &task_ptr = kv.second;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (auto &kv : jobstatus_task_map_) {
+            auto &jobstatus = kv.first;
+            auto &task_ptr = kv.second;
 
-        if (valid_successful_statuses.contains(jobstatus->name)) _successful_task_count--;
+            if (valid_successful_statuses.contains(jobstatus->name)) _successful_task_count--;
 
-        if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
-            upload_timestamp = task_ptr->finish_time;
-            continue;
-        }
+            if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
+                upload_timestamp = task_ptr->finish_time;
+                continue;
+            }
 
-        if (jobstatus->name == "source_check" && task_ptr && !task_ptr->successful) {
-            source_check_timestamp = task_ptr->finish_time;
-            continue;
+            if (jobstatus->name == "source_check" && task_ptr && !task_ptr->successful) {
+                source_check_timestamp = task_ptr->finish_time;
+                continue;
+            }
         }
     }
     bool all_req_tasks_present = _successful_task_count == 0;
