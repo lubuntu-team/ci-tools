@@ -255,6 +255,9 @@ public:
     }
 
     static bool compare(const std::shared_ptr<Task>& lhs, const std::shared_ptr<Task>& rhs);
+
+private:
+    std::shared_ptr<std::mutex> sync_mutex_ = std::make_shared<std::mutex>();
 };
 
 inline size_t qHash(const PackageConf::PackageConfPlain& key, size_t seed = 0) {

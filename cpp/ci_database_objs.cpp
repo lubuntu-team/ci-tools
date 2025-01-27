@@ -882,12 +882,12 @@ void PackageConf::sync() {
     {
         std::lock_guard<std::mutex> lock(*task_mutex_);
         for (auto [job_status, task] : jobstatus_task_map_) {
-            if (task) {
-                auto sync_func = [this, task]() mutable {
-                    if (task->jobstatus != nullptr) task->save(id);
-                };
-                sync_func();
-            }
+            if (!task) continue;
+
+            auto sync_func = [this, task]() mutable {
+                if (task->jobstatus != nullptr) task->save(id);
+            };
+            sync_func();
         }
     }
 }
@@ -1148,6 +1148,7 @@ JobStatus::JobStatus(int id) : id(id) {
 Task::Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_ptr<PackageConf> packageconf)
     : jobstatus(jobstatus), queue_time(time), is_running(false), log(std::make_shared<Log>()), parent_packageconf(packageconf)
 {
+    std::lock_guard<std::mutex> sync_lock(*sync_mutex_);
     assert(log != nullptr && "Log pointer should never be null");
     QSqlQuery insert_query(get_thread_connection());
     insert_query.prepare("INSERT INTO task (packageconf_id, jobstatus_id, queue_time) VALUES (?, ?, ?)");
@@ -1207,6 +1208,7 @@ bool Task::compare(const std::shared_ptr<Task>& lhs, const std::shared_ptr<Task>
 }
 
 std::set<std::shared_ptr<Task>> Task::get_completed_tasks(std::vector<std::shared_ptr<PackageConf>> packageconfs, std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses, int page, int per_page) {
+    std::lock_guard<std::mutex> sync_lock(*sync_mutex_);
     std::set<std::shared_ptr<Task>> result;
 
     if (per_page < 1) { per_page = 1; }
@@ -1251,6 +1253,7 @@ std::set<std::shared_ptr<Task>> Task::get_completed_tasks(std::vector<std::share
 }
 
 void Task::save(int _packageconf_id) {
+    std::lock_guard<std::mutex> sync_lock(*sync_mutex_);
     QSqlQuery query(get_thread_connection());
     query.prepare("UPDATE task SET jobstatus_id = ?, queue_time = ?, start_time = ?, finish_time = ?, successful = ?, log = ? WHERE id = ?");
     query.addBindValue(jobstatus->id);
