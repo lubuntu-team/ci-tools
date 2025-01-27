@@ -1199,54 +1199,58 @@ std::vector<std::shared_ptr<PackageConf>> CiLogic::get_config(const std::string 
 
 std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
                                         std::unique_ptr<TaskQueue>& task_queue,
-                                        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses) {
+                                        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses)
+{
     std::string msg;
     std::map<std::string, std::shared_ptr<package_conf_item>> encountered_items;
     std::mutex task_assignment_mutex;
 
     try {
-        for (auto r : repos) {
-            bool is_ghost_pull = false;
-
-            // Attempt to find if we've seen this package->name before
+        for (auto &r : repos) {
             std::lock_guard<std::mutex> lock(task_assignment_mutex);
             auto found_it = encountered_items.find(r->package->name);
-            std::shared_ptr<package_conf_item> new_item = std::make_shared<package_conf_item>();
             if (found_it != encountered_items.end()) {
-                is_ghost_pull = true;
+                // GHOST pull
+                auto existing_item = found_it->second;
 
-                r->assign_task(job_statuses->at("pull"), found_it->second->first_pull_task, r);
-                r->assign_task(job_statuses->at("tarball"), found_it->second->first_tarball_task, r);
-                r->packaging_commit = found_it->second->packaging_commit;
-                r->upstream_commit = found_it->second->upstream_commit;
-                sync(r);
+                // Assign tasks (reuse the same Task objects for "pull"/"tarball")
+                r->assign_task(job_statuses->at("pull"), existing_item->first_pull_task, r);
+                r->assign_task(job_statuses->at("tarball"), existing_item->first_tarball_task, r);
 
-                continue;
+                // Point packaging_commit/upstream_commit to the real pkgconf's pointers
+                r->packaging_commit = existing_item->first_pkgconf->packaging_commit;
+                r->upstream_commit  = existing_item->first_pkgconf->upstream_commit;
+                r->sync();
             }
+            else {
+                // REAL pull
+                auto new_item = std::make_shared<package_conf_item>();
+                new_item->first_pkgconf = r;
 
-            task_queue->enqueue(
-                job_statuses->at("pull"),
-                [this, r](std::shared_ptr<Log> log) mutable {
-                    pull_project(r, log);
-                },
-                r
-            );
-            new_item->first_pull_task = r->get_task_by_jobstatus(job_statuses->at("pull"));
+                // Enqueue "pull"
+                task_queue->enqueue(
+                    job_statuses->at("pull"),
+                    [this, r](std::shared_ptr<Log> log) mutable {
+                        pull_project(r, log);
+                        r->sync();
+                    },
+                    r
+                );
+                new_item->first_pull_task = r->get_task_by_jobstatus(job_statuses->at("pull"));
 
-            task_queue->enqueue(
-                job_statuses->at("tarball"),
-                [this, r](std::shared_ptr<Log> log) mutable {
-                    create_project_tarball(r, log);
-                },
-                r
-            );
-            new_item->first_tarball_task = r->get_task_by_jobstatus(job_statuses->at("tarball"));
+                // Enqueue "tarball"
+                task_queue->enqueue(
+                    job_statuses->at("tarball"),
+                    [this, r](std::shared_ptr<Log> log) mutable {
+                        create_project_tarball(r, log);
+                        r->sync();
+                    },
+                    r
+                );
+                new_item->first_tarball_task = r->get_task_by_jobstatus(job_statuses->at("tarball"));
 
-            new_item->first_pkgconf = r;
-
-            new_item->packaging_commit = r->packaging_commit;
-            new_item->upstream_commit = r->upstream_commit;
-            encountered_items[r->package->name] = new_item;
+                encountered_items[r->package->name] = new_item;
+            }
         }
         msg = "Succeeded";
     } catch (...) {
