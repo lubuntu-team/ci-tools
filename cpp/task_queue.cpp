@@ -139,7 +139,6 @@ void TaskQueue::worker_thread() {
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
             task_to_execute->start_time = now;
-            task_to_execute->save(0);
         }
 
         try {
@@ -161,11 +160,11 @@ void TaskQueue::worker_thread() {
                       std::chrono::system_clock::now().time_since_epoch())
                       .count();
             task_to_execute->finish_time = now;
-            task_to_execute->save(0);
         }
 
         {
             // Remove the task from running_tasks_
+            task_to_execute->save(0);
             std::lock_guard<std::mutex> lock(running_tasks_mutex_);
             int id = task_to_execute->id;
             auto running_task_it = std::find_if(running_tasks_.begin(), running_tasks_.end(),
