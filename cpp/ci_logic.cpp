@@ -696,8 +696,9 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                     new_item->first_tarball_task = r->get_task_by_jobstatus(job_statuses->at("tarball"));
                     encountered_items[r->package->name] = new_item;
                 }
+
+                r->sync();
             }));
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
         for (auto& future : futures) future.get();
         msg = "Succeeded";
