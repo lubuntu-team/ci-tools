@@ -88,7 +88,10 @@ bool ci_query_exec(QSqlQuery* query, const QString query_string) {
 
         QSqlError error = query->lastError();
         if (error.text().contains("database is locked")) std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
-        else break;
+        else if (error.text().contains("Parameter count mismatch")) {
+            if (attempt > 15) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+        } else break;
     }
     return false;
 }
