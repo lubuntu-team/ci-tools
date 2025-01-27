@@ -30,27 +30,42 @@ static std::mutex connection_mutex_;
 static std::atomic<unsigned int> thread_id_counter{1};
 static QString shared_database_path;
 
+static int get_delay(int attempt) {
+    return 10 * static_cast<int>(std::pow(1.5, attempt - 1));
+}
+
 QSqlDatabase get_thread_connection() {
-    std::lock_guard<std::mutex> lock(connection_mutex_);
-    thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
-    QString connection_name = QString("CIConn_%1").arg(thread_unique_id);
+    QString connection_name;
+    QSqlDatabase thread_db;
+    bool passed = false;
+    int attempt = 0;
+    while (!passed) {
+        std::lock_guard<std::mutex> lock(connection_mutex_);
+        thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
+        connection_name = QString("CIConn_%1").arg(thread_unique_id);
 
-    // Check if the connection already exists for this thread
-    if (QSqlDatabase::contains(connection_name)) {
-        QSqlDatabase db = QSqlDatabase::database(connection_name);
-        if (!db.isOpen()) {
-            if (!db.open()) {
-                throw std::runtime_error("Failed to open thread-specific database connection: " + db.lastError().text().toStdString());
+        // Check if the connection already exists for this thread
+        attempt++;
+        if (QSqlDatabase::contains(connection_name)) {
+            QSqlDatabase db = QSqlDatabase::database(connection_name);
+            if (!db.isOpen()) {
+                if (!db.open()) {
+                    std::string last_error_text = db.lastError().text().toStdString();
+                    if (last_error_text.contains("unable to open database file")) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+                        continue;
+                    }
+                    throw std::runtime_error(std::format("Failed to open thread-specific database connection: {}", last_error_text));
+                }
             }
+            return db;
         }
-        return db;
-    }
 
-    QSqlDatabase thread_db = QSqlDatabase::addDatabase("QSQLITE", connection_name);
-    thread_db.setDatabaseName(shared_database_path);
+        thread_db = QSqlDatabase::addDatabase("QSQLITE", connection_name);
+        thread_db.setDatabaseName(shared_database_path);
 
-    if (!thread_db.open()) {
-        throw std::runtime_error("Failed to open new database connection for thread: " + thread_db.lastError().text().toStdString());
+        if (!thread_db.open()) throw std::runtime_error("Failed to open new database connection for thread: " + thread_db.lastError().text().toStdString());
+        passed = true;
     }
 
     return thread_db;
@@ -67,10 +82,8 @@ bool ci_query_exec(QSqlQuery* query, const QString query_string) {
         attempt++;
 
         QSqlError error = query->lastError();
-        if (error.text().contains("database is locked")) {
-            int delay = 10 * static_cast<int>(std::pow(1.5, attempt - 1));
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-        } else break;
+        if (error.text().contains("database is locked")) std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+        else break;
     }
     return false;
 }
