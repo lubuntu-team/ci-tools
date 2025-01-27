@@ -36,10 +36,11 @@ static int get_delay(int attempt) {
 
 QSqlDatabase get_thread_connection() {
     QString connection_name;
-    QSqlDatabase thread_db;
     bool passed = false;
     int attempt = 0;
     while (!passed) {
+        QSqlDatabase thread_db;
+
         std::lock_guard<std::mutex> lock(connection_mutex_);
         thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
         connection_name = QString("CIConn_%1").arg(thread_unique_id);
@@ -70,10 +71,8 @@ QSqlDatabase get_thread_connection() {
         }
 
         if (!thread_db.open()) throw std::runtime_error("Failed to open new database connection for thread: " + thread_db.lastError().text().toStdString());
-        passed = true;
+        return thread_db;
     }
-
-    return thread_db;
 }
 
 bool ci_query_exec(QSqlQuery* query, const QString query_string) {
