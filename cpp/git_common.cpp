@@ -283,8 +283,16 @@ void clone_or_fetch(const std::filesystem::path &repo_dir,
 
         opts.checkout_opts.checkout_strategy |= GIT_CHECKOUT_UPDATE_SUBMODULES;
 
-        error = git_clone(&repo, repo_url.c_str(), repo_dir.c_str(), &opts);
-        if (error != 0) {
+        bool success = false;
+        for (int attempts = 0; attempts < 5; attempts++) {
+            if (git_clone(&repo, repo_url.c_str(), repo_dir.c_str(), &opts) != 0) {
+                continue;
+            } else {
+                success = true;
+                break;
+            }
+        }
+        if (!success) {
             const git_error *e = git_error_last();
             throw std::runtime_error("Failed to clone: " +
                                      std::string(e && e->message ? e->message : "unknown"));
@@ -307,7 +315,16 @@ void clone_or_fetch(const std::filesystem::path &repo_dir,
         fetch_opts.callbacks = callbacks;
         if (proxy) fetch_opts.proxy_opts = proxy_opts;
 
-        if (git_remote_fetch(remote, nullptr, &fetch_opts, nullptr) < 0) {
+        bool success = false;
+        for (int attempts = 0; attempts < 5; attempts++) {
+            if (git_remote_fetch(remote, nullptr, &fetch_opts, nullptr) < 0) {
+                continue;
+            } else {
+                success = true;
+                break;
+            }
+        }
+        if (!success) {
             const git_error *e = git_error_last();
             git_remote_free(remote);
             git_repository_free(repo);
