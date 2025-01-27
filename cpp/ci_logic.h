@@ -1,4 +1,4 @@
-// Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+// Copyright (C) 2024-2025 Simon Quigley <tsimonq2@ubuntu.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -63,9 +63,6 @@ class CiLogic {
 
         // Convert a YAML node to a CiProject structure
         CiProject yaml_to_project(const YAML::Node &pkg_node);
-
-        // Clone or fetch a git repository
-        void clone_or_fetch(const std::filesystem::path &repo_dir, const std::string &repo_url, const std::optional<std::string> &branch, std::shared_ptr<Log> log = NULL);
 
         bool pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = NULL);
         bool create_project_tarball(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = NULL);

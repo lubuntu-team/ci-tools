@@ -31,15 +31,16 @@ set(UUID_LIB "uuid")
 add_library(lubuntuci_lib SHARED
     common.cpp
     utilities.cpp
+    db_common.cpp
+    git_common.cpp
+    sources_parser.cpp
     ci_logic.cpp
     ci_database_objs.cpp
     lubuntuci_lib.cpp
     task_queue.cpp
     template_renderer.cpp
     web_server.cpp
-    sources_parser.cpp
     naive_bayes_classifier.cpp
-    db_common.cpp
 )
 
 target_include_directories(lubuntuci_lib PUBLIC
