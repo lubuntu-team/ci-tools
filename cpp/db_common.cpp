@@ -46,23 +46,28 @@ QSqlDatabase get_thread_connection() {
 
         // Check if the connection already exists for this thread
         attempt++;
-        if (QSqlDatabase::contains(connection_name)) {
-            QSqlDatabase db = QSqlDatabase::database(connection_name);
-            if (!db.isOpen()) {
-                if (!db.open()) {
-                    std::string last_error_text = db.lastError().text().toStdString();
-                    if (last_error_text.contains("unable to open database file")) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
-                        continue;
+        try {
+            if (QSqlDatabase::contains(connection_name)) {
+                QSqlDatabase db = QSqlDatabase::database(connection_name);
+                if (!db.isOpen()) {
+                    if (!db.open()) {
+                        std::string last_error_text = db.lastError().text().toStdString();
+                        if (last_error_text.contains("unable to open database file")) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+                            continue;
+                        }
+                        throw std::runtime_error(std::format("Failed to open thread-specific database connection: {}", last_error_text));
                     }
-                    throw std::runtime_error(std::format("Failed to open thread-specific database connection: {}", last_error_text));
                 }
+                return db;
             }
-            return db;
-        }
 
-        thread_db = QSqlDatabase::addDatabase("QSQLITE", connection_name);
-        thread_db.setDatabaseName(shared_database_path);
+            thread_db = QSqlDatabase::addDatabase("QSQLITE", connection_name);
+            thread_db.setDatabaseName(shared_database_path);
+        } catch (...) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+            continue;
+        }
 
         if (!thread_db.open()) throw std::runtime_error("Failed to open new database connection for thread: " + thread_db.lastError().text().toStdString());
         passed = true;
