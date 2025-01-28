@@ -655,7 +655,7 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                     r->packaging_commit = existing_item->first_pkgconf->packaging_commit;
                     r->upstream_commit  = existing_item->first_pkgconf->upstream_commit;
                     r->sync();
-                    return;
+                    continue;
                 }
             }
             // REAL pull
