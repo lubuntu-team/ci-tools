@@ -504,6 +504,9 @@ void clone_or_fetch(const std::filesystem::path &repo_dir,
  * reset_changelog to HEAD content
  */
 void reset_changelog(const fs::path &repo_dir, const fs::path &changelog_path) {
+    // Remove the .dch path first
+    std::remove((std::string{changelog_path.string()} + ".dch").c_str());
+
     git_repository *repo = nullptr;
     if (git_repository_open(&repo, repo_dir.c_str()) != 0) {
         const git_error *e = git_error_last();

@@ -389,6 +389,10 @@ std::tuple<bool, std::set<std::string>> CiLogic::build_project(std::shared_ptr<P
         proj->upstream_version = base_git_ver + "~" + proj->release->codename;
         sync(proj);
 
+        // Reset changelog after dch (so pending changes aren't committed)
+        reset_changelog(packaging_dir.parent_path() / proj->package->name, changelog);
+        log->append("Reset debian/changelog to HEAD...");
+
         // Update changelog for this release
         update_changelog(packaging_dir, proj->release->codename, proj->upstream_version, std::to_string(proj->ppa_revision), log);
         log->append("Changelog updated, copying the packaging...");
@@ -398,7 +402,7 @@ std::tuple<bool, std::set<std::string>> CiLogic::build_project(std::shared_ptr<P
         copy_directory(packaging_dir, dest_dir);
         log->append("Copied packaging to " + dest_dir.string() + ", copying tarball...");
 
-        // Reset changelog after dchd$ (so local changes aren't committed)
+        // Reset changelog after dch (so local changes aren't committed)
         reset_changelog(packaging_dir.parent_path() / proj->package->name, changelog);
         log->append("Reset debian/changelog to HEAD...");
 
