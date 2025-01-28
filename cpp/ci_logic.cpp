@@ -581,23 +581,39 @@ std::vector<std::shared_ptr<PackageConf>> CiLogic::get_config(const std::string 
                             : (a->package->name > b->package->name);
                     }
                 } else if (sort_by == "build_status") {
-                    if (a->successful_task_count() != b->successful_task_count()) {
-                        return (order == "asc")
-                            ? (a->successful_task_count() < b->successful_task_count())
-                            : (a->successful_task_count() > b->successful_task_count());
-                    } else if (a->successful_or_pending_task_count() != b->successful_or_pending_task_count()) {
-                        return (order == "asc")
-                            ? (a->successful_or_pending_task_count() < b->successful_or_pending_task_count())
-                            : (a->successful_or_pending_task_count() > b->successful_or_pending_task_count());
-                    } else if (a->successful_or_queued_task_count() != b->successful_or_queued_task_count()) {
-                        return (order == "asc")
-                            ? (a->successful_or_queued_task_count() < b->successful_or_queued_task_count())
-                            : (a->successful_or_queued_task_count() > b->successful_or_queued_task_count());
-                    } else {
-                        return (order == "asc")
-                            ? (a->total_task_count() < b->total_task_count())
-                            : (a->total_task_count() > b->total_task_count());
+                    {
+                        int a_successful_task_count = a->successful_task_count();
+                        int b_successful_task_count = b->successful_task_count();
+                        if (a_successful_task_count != b_successful_task_count) {
+                            return (order == "asc")
+                                ? (a_successful_task_count < b_successful_task_count)
+                                : (a_successful_task_count > b_successful_task_count);
+                        }
                     }
+
+                    {
+                        int a_successful_or_pending_task_count = a->successful_or_pending_task_count();
+                        int b_successful_or_pending_task_count = b->successful_or_pending_task_count();
+                        if (a_successful_or_pending_task_count != b_successful_or_pending_task_count) {
+                            return (order == "asc")
+                                ? (a_successful_or_pending_task_count < b_successful_or_pending_task_count)
+                                : (a_successful_or_pending_task_count > b_successful_or_pending_task_count);
+                        }
+                    }
+
+                    {
+                        int a_successful_or_queued_task_count = a->successful_or_queued_task_count();
+                        int b_successful_or_queued_task_count = b->successful_or_queued_task_count();
+                        if (a_successful_or_queued_task_count != b_successful_or_queued_task_count) {
+                            return (order == "asc")
+                                ? (a_successful_or_queued_task_count < b_successful_or_queued_task_count)
+                                : (a_successful_or_queued_task_count > b_successful_or_queued_task_count);
+                        }
+                    }
+
+                    return (order == "asc")
+                        ? (a->total_task_count() < b->total_task_count())
+                        : (a->total_task_count() > b->total_task_count());
                 }
                 // if invalid sort_by
                 return false;
