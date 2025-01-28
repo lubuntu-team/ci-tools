@@ -6,6 +6,17 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-flto=3" COMPILER_SUPPORTS_LTO)
+
+if(COMPILER_SUPPORTS_LTO)
+    message(STATUS "Enabling LTO Level 3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=3 -O3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto=3 -O3")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=3")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -flto=3")
+endif()
+
 #
 # Allow the user to override LAUNCHPAD_CPP_INCLUDE_DIR/LAUNCHPAD_CPP_LIBRARY
 #
