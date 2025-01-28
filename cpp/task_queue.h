@@ -31,7 +31,7 @@
 
 class TaskQueue {
 public:
-    TaskQueue(size_t max_concurrent_tasks = 10);
+    TaskQueue(size_t max_concurrent_tasks = 6);
     ~TaskQueue();
 
     void enqueue(std::shared_ptr<JobStatus> jobstatus, std::function<void(std::shared_ptr<Log> log)> task_func, std::shared_ptr<PackageConf> packageconf);

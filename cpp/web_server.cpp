@@ -177,7 +177,7 @@ bool WebServer::start_server(quint16 port) {
     std::shared_ptr<PackageConf> _tmp_pkg_conf = std::make_shared<PackageConf>();
     std::shared_ptr<LubuntuCI> lubuntuci = std::make_shared<LubuntuCI>();
     std::vector<std::shared_ptr<PackageConf>> all_repos = lubuntuci->list_known_repos();
-    task_queue = std::make_unique<TaskQueue>(10);
+    task_queue = std::make_unique<TaskQueue>(6);
     std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses = lubuntuci->cilogic.get_job_statuses();
     task_queue->start();
 
