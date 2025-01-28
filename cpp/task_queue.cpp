@@ -61,7 +61,7 @@ void TaskQueue::start() {
 void TaskQueue::stop() {
    {
         std::unique_lock<std::mutex> tasks_lock(tasks_mutex_);
-        std::unique_lock<std::mutex> pkgconfs_lock(running_pkgconfs_mutex_);
+        std::unique_lock<std::mutex> packages_lock(running_packages_mutex_);
         std::unique_lock<std::mutex> running_tasks_lock(running_tasks_mutex_);
         stop_ = true;
     }
@@ -100,14 +100,14 @@ void TaskQueue::worker_thread() {
                     task_to_execute = it_task;
                 }
 
-                int pkgconf_id = task_to_execute->get_parent_packageconf()->id;
+                int package_id = task_to_execute->get_parent_packageconf()->package->id;
 
                 {
-                    std::lock_guard<std::mutex> lock(running_pkgconfs_mutex_);
-                    auto running_pkgconf_it = std::find_if(running_pkgconfs_.begin(), running_pkgconfs_.end(),
-                        [&pkgconf_id](const std::shared_ptr<PackageConf>& pkgconf) { return pkgconf->id == pkgconf_id; });
+                    std::lock_guard<std::mutex> lock(running_packages_mutex_);
+                    auto running_package_it = std::find_if(running_packages_.begin(), running_packages_.end(),
+                        [&package_id](const std::shared_ptr<Package>& package) { return package->id == package_id; });
 
-                    if (running_pkgconf_it != running_pkgconfs_.end()) {
+                    if (running_package_it != running_packages_.end()) {
                         ++it; // Move to the next task
                         continue;
                     }
@@ -124,8 +124,8 @@ void TaskQueue::worker_thread() {
         if (!task_to_execute || !task_to_execute->func) continue;
         else {
             {
-                std::lock_guard<std::mutex> pkgconfslock(running_pkgconfs_mutex_);
-                running_pkgconfs_.insert(task_to_execute->get_parent_packageconf());
+                std::lock_guard<std::mutex> packages_lock(running_packages_mutex_);
+                running_packages_.insert(task_to_execute->get_parent_packageconf()->package);
             }
             {
                 std::lock_guard<std::mutex> tasks_lock(running_tasks_mutex_);
@@ -175,14 +175,14 @@ void TaskQueue::worker_thread() {
         }
 
         {
-            // Remove packageconf from running_pkgconfs_ by id
-            std::lock_guard<std::mutex> lock(running_pkgconfs_mutex_);
-            int pkgconf_id = task_to_execute->get_parent_packageconf()->id;
-            auto running_pkgconf_it = std::find_if(running_pkgconfs_.begin(), running_pkgconfs_.end(),
-                [&pkgconf_id](const std::shared_ptr<PackageConf>& pkgconf) { return pkgconf->id == pkgconf_id; });
+            // Remove packageconf from running_packages_ by id
+            std::lock_guard<std::mutex> lock(running_packages_mutex_);
+            int package_id = task_to_execute->get_parent_packageconf()->package->id;
+            auto running_package_it = std::find_if(running_packages_.begin(), running_packages_.end(),
+                [&package_id](const std::shared_ptr<Package>& package) { return package->id == package_id; });
 
-            if (running_pkgconf_it != running_pkgconfs_.end()) {
-                running_pkgconfs_.erase(running_pkgconf_it);
+            if (running_package_it != running_packages_.end()) {
+                running_packages_.erase(running_package_it);
             }
         }
 

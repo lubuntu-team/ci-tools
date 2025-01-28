@@ -45,10 +45,10 @@ private:
     size_t max_concurrent_tasks_;
     std::set<std::shared_ptr<Task>, Task::TaskComparator> tasks_;
     std::set<std::shared_ptr<Task>, Task::TaskComparator> running_tasks_;
-    std::set<std::shared_ptr<PackageConf>> running_pkgconfs_;
+    std::set<std::shared_ptr<Package>> running_packages_;
     std::queue<std::function<void()>> thread_pool_tasks_;
     mutable std::mutex tasks_mutex_;
-    mutable std::mutex running_pkgconfs_mutex_;
+    mutable std::mutex running_packages_mutex_;
     mutable std::mutex running_tasks_mutex_;
     std::condition_variable cv_;
     bool stop_;
