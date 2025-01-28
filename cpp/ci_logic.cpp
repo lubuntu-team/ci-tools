@@ -735,12 +735,14 @@ std::string CiLogic::queue_build_upload(std::vector<std::shared_ptr<PackageConf>
                 job_statuses->at("source_build"),
                 [this, r, &task_queue, job_statuses](std::shared_ptr<Log> log) mutable {
                     auto [build_ok, changes_files] = build_project(r, log);
+                    r->sync();
                     if (build_ok) {
                         task_queue->enqueue(
                             job_statuses->at("upload"),
                             [this, r, changes_files](std::shared_ptr<Log> log) mutable {
                                 bool upload_ok = upload_and_lint(r, changes_files, false, log);
                                 (void)upload_ok;
+                                r->sync();
                             },
                             r
                         );
