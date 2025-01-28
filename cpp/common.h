@@ -40,6 +40,7 @@ public:
         std::unique_lock lock(lock_);
         std::string log_str = str.ends_with('\n') ? str : str + '\n';
         if (str.empty() || last_data_str == log_str) { return; }
+        else if (str.contains("dpkg-source: warning: ignoring deletion of file")) { return; }
         data += std::format("[{}] {}", get_current_utc_time("%Y-%m-%dT%H:%M:%SZ"), log_str);
         last_data_str = log_str;
     }
