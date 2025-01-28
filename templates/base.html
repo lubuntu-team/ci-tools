@@ -18,9 +18,20 @@ the Free Software Foundation, either version 3 of the License, or
 </head>
 <body class="bg-light">
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-3">
-  <div class="container-fluid">
-    <a class="navbar-brand" href="/">Lubuntu CI</a>
-  </div>
+    <a class="navbar-brand pl-2" href="/">Lubuntu CI</a>
+    <ul class="navbar-nav mx-auto">
+        <li class="nav-item">
+            <a class="nav-link" href="/">Home</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="/tasks">Tasks</a>
+        </li>
+    </ul>
+    <span class="navbar-text">
+        <!--<img src="https://api.launchpad.net/devel/~tsimonq2/logo" height="32em" width="32em" />
+        <span class="px-2">tsimonq2</span>-->
+        USER
+    </span>
 </nav>
 <div class="mt-2 px-5">
   {{BLOCK content}}
