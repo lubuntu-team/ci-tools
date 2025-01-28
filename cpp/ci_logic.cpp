@@ -665,6 +665,7 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                 // REAL pull
                 auto new_item = std::make_shared<package_conf_item>();
                 new_item->first_pkgconf = r;
+                r->sync();
 
                 // Enqueue "pull"
                 task_queue->enqueue(
