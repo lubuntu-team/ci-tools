@@ -41,19 +41,23 @@ QSqlDatabase get_thread_connection() {
     while (!passed) {
         QSqlDatabase thread_db;
 
-        std::lock_guard<std::mutex> lock(connection_mutex_);
-        thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
-        connection_name = QString("CIConn_%1").arg(thread_unique_id);
+        {
+            std::lock_guard<std::mutex> lock(connection_mutex_);
+            thread_local unsigned int thread_unique_id = thread_id_counter.fetch_add(1);
+            connection_name = QString("CIConn_%1").arg(thread_unique_id);
+            attempt++;
+        }
 
         // Check if the connection already exists for this thread
-        attempt++;
         try {
             if (QSqlDatabase::contains(connection_name)) {
                 QSqlDatabase db = QSqlDatabase::database(connection_name);
+                db.setConnectOptions(QStringLiteral("QSQLITE_BUSY_TIMEOUT=5000"));
                 if (!db.isOpen()) {
                     if (!db.open()) {
                         std::string last_error_text = db.lastError().text().toStdString();
-                        if (last_error_text.contains("unable to open database file")) {
+                        if (last_error_text.contains("unable to open database file") |
+                            last_error_text.contains("database is locked")) {
                             std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
                             continue;
                         }
@@ -70,7 +74,15 @@ QSqlDatabase get_thread_connection() {
             continue;
         }
 
-        if (!thread_db.open()) throw std::runtime_error("Failed to open new database connection for thread: " + thread_db.lastError().text().toStdString());
+        if (!thread_db.open()) {
+            const QString err = thread_db.lastError().text();
+            if (err.contains("unable to open database file") || err.contains("database is locked"))
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(get_delay(attempt)));
+                continue;
+            }
+            throw std::runtime_error("Failed to open new database connection: " + err.toStdString());
+        }
         return thread_db;
     }
 }
