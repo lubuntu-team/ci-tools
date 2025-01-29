@@ -45,6 +45,7 @@ private:
     std::unique_ptr<TaskQueue> task_queue;
     std::jthread expire_tokens_thread_;
     std::jthread process_sources_thread_;
+    std::jthread process_binaries_thread_;
 
     QMap<int, QDateTime> _in_progress_tokens;
     QMap<QString, QDateTime> _active_tokens;

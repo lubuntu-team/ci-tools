@@ -241,6 +241,43 @@ bool WebServer::start_server(quint16 port) {
         }
     });
 
+    process_binaries_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, lubuntuci, job_statuses] {
+        for (auto pkgconf : all_repos) {
+            if (!pkgconf->can_check_builds()) { continue; }
+
+            task_queue->enqueue(
+                job_statuses->at("binary_check"),
+                [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
+                    std::string package_version = pkgconf->upstream_version + "-0ubuntu0~ppa" + std::to_string(pkgconf->ppa_revision);
+                    bool found_in_ppa = false;
+                    source_package_publishing_history target_spph;
+                    for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
+                        found_in_ppa = true;
+                        target_spph = spph;
+                        break;
+                    }
+
+                    bool all_builds_passed = true;
+                    for (auto build : target_spph.getBuilds()) {
+                        if (build.buildstate != "Successfully built") all_builds_passed = false;
+                        log->append(std::format("Build of {} {} in {} for {} has a status of {}",
+                                                pkgconf->package->name, package_version, pkgconf->release->codename,
+                                                build.arch_tag, build.buildstate));
+                    }
+
+                    if (!found_in_ppa) {
+                        throw std::runtime_error("Not found in the PPA.");
+                    } else if (!all_builds_passed) {
+                        throw std::runtime_error("Build(s) pending or failed, job is not successful.");
+                    }
+                },
+                pkgconf
+            );
+
+            pkgconf->sync();
+        }
+    });
+
     ////////////////////////////////////////////////////////////////
     // /unauthorized?base_url=<base_url>&redirect_to=<redirect_to>
     ////////////////////////////////////////////////////////////////

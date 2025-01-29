@@ -935,30 +935,45 @@ bool PackageConf::can_check_source_upload() {
 }
 
 bool PackageConf::can_check_builds() {
+    // In this case, the source check should be first
+    if (can_check_source_upload()) return false;
+    int _total_task_count = total_task_count();
+    if (_total_task_count == 0) return false;
+
     std::lock_guard<std::mutex> lock(*task_mutex_);
 
-    if (!(jobstatus_task_map_.size() == 5)) { return false; }
+    std::int64_t upload_timestamp = 0;
+    std::int64_t binary_check_timestamp = 0;
+    std::set<std::string> valid_successful_statuses = {"pull", "tarball", "source_build", "upload", "source_check"};
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (auto &kv : jobstatus_task_map_) {
+            auto &jobstatus = kv.first;
+            auto &task_ptr = kv.second;
 
-    static const std::array<std::string, 5> statuses = { "pull", "tarball", "source_build", "upload", "source_check" };
-    int cur_status = 0;
-    std::int64_t cur_timestamp = 0;
-    bool return_status = false;
-    for (auto &kv : jobstatus_task_map_) {
-        auto &jobstatus = kv.first;
-        auto &task_ptr = kv.second;
+            if (valid_successful_statuses.contains(jobstatus->name)) _total_task_count--;
 
-        if (jobstatus->name == statuses[cur_status] && task_ptr) {
-            if (task_ptr->finish_time >= cur_timestamp && task_ptr->successful) {
-                return_status = true;
-                cur_timestamp = task_ptr->finish_time;
-                cur_status++;
-            } else {
-                return_status = false;
-                break;
+            if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
+                upload_timestamp = task_ptr->finish_time;
+                continue;
+            }
+
+            if (jobstatus->name == "binary_check" && task_ptr) {
+                binary_check_timestamp = task_ptr->finish_time;
+                _total_task_count--;
+                continue;
             }
         }
     }
-    return return_status && cur_status == 5;
+    bool all_req_tasks_present = _total_task_count == 0;
+    if (!all_req_tasks_present || (upload_timestamp == 0 && binary_check_timestamp == 0)) {
+        return false;
+    } else if (all_req_tasks_present && upload_timestamp != 0 && binary_check_timestamp == 0) {
+        return true;
+    } else if (all_req_tasks_present) {
+        return binary_check_timestamp <= upload_timestamp;
+    }
+    return false;
 }
 // End of PackageConf
 // Start of GitCommit
