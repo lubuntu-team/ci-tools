@@ -897,8 +897,8 @@ void PackageConf::sync() {
 }
 
 bool PackageConf::can_check_source_upload() {
-    int _successful_task_count = successful_task_count();
-    if (_successful_task_count == 0) return false;
+    int _total_task_count = total_task_count();
+    if (_total_task_count == 0) return false;
 
     std::int64_t upload_timestamp = 0;
     std::int64_t source_check_timestamp = 0;
@@ -909,7 +909,7 @@ bool PackageConf::can_check_source_upload() {
             auto &jobstatus = kv.first;
             auto &task_ptr = kv.second;
 
-            if (valid_successful_statuses.contains(jobstatus->name)) _successful_task_count--;
+            if (valid_successful_statuses.contains(jobstatus->name)) _total_task_count--;
 
             if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
                 upload_timestamp = task_ptr->finish_time;
@@ -917,13 +917,13 @@ bool PackageConf::can_check_source_upload() {
             }
 
             if (jobstatus->name == "source_check" && task_ptr) {
-                if (task_ptr->successful) source_check_timestamp = task_ptr->finish_time;
-                _successful_task_count--;
+                source_check_timestamp = task_ptr->finish_time;
+                _total_task_count--;
                 continue;
             }
         }
     }
-    bool all_req_tasks_present = _successful_task_count == 0;
+    bool all_req_tasks_present = _total_task_count == 0;
     if (!all_req_tasks_present || (upload_timestamp == 0 && source_check_timestamp == 0)) {
         return false;
     } else if (all_req_tasks_present && upload_timestamp != 0 && source_check_timestamp == 0) {
