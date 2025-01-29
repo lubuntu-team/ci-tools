@@ -735,9 +735,11 @@ bool WebServer::start_server(quint16 port) {
                     return std::stoi(s);
                 })
             );
+            auto pkgconfs = lubuntuci->cilogic.get_packageconfs_by_ids(repos);
+            for (auto pkgconf : pkgconfs) pkgconf->clear_tasks();
 
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
-            msg += lubuntuci->cilogic.queue_build_upload(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
+            std::string msg = lubuntuci->cilogic.queue_pull_tarball(pkgconfs, task_queue, job_statuses);
+            msg += lubuntuci->cilogic.queue_build_upload(pkgconfs, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -781,6 +783,7 @@ bool WebServer::start_server(quint16 port) {
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
+            for (auto pkgconf : all_repos) pkgconf->clear_tasks();
             std::string msg = lubuntuci->cilogic.queue_pull_tarball(all_repos, task_queue, job_statuses);
             msg += lubuntuci->cilogic.queue_build_upload(all_repos, task_queue, job_statuses);
 

@@ -735,6 +735,10 @@ void PackageConf::assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_
     jobstatus_task_map_[jobstatus] = task_ptr;
 }
 
+void PackageConf::clear_tasks() {
+    std::lock_guard<std::mutex> lock(*task_mutex_);
+    jobstatus_task_map_.clear();
+}
 
 bool PackageConf::set_package_confs() {
     // Fetch current PackageConf entries from the database

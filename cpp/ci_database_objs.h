@@ -161,6 +161,7 @@ public:
     std::vector<std::shared_ptr<PackageConf>> get_package_confs_by_package_name(std::vector<std::shared_ptr<PackageConf>> packageconfs,
                                                                                 const std::string& package_name);
     void assign_task(std::shared_ptr<JobStatus> jobstatus, std::shared_ptr<Task> task_ptr, std::weak_ptr<PackageConf> packageconf_ptr);
+    void clear_tasks();
     int successful_task_count();
     int successful_or_pending_task_count();
     int successful_or_queued_task_count();
