@@ -257,6 +257,8 @@ bool WebServer::start_server(quint16 port) {
                         break;
                     }
 
+                    if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
+
                     bool all_builds_passed = true;
                     for (auto build : target_spph.getBuilds()) {
                         if (build.buildstate != "Successfully built") all_builds_passed = false;
@@ -265,11 +267,7 @@ bool WebServer::start_server(quint16 port) {
                                                 build.arch_tag, build.buildstate));
                     }
 
-                    if (!found_in_ppa) {
-                        throw std::runtime_error("Not found in the PPA.");
-                    } else if (!all_builds_passed) {
-                        throw std::runtime_error("Build(s) pending or failed, job is not successful.");
-                    }
+                    if (!all_builds_passed) throw std::runtime_error("Build(s) pending or failed, job is not successful.");
                 },
                 pkgconf
             );
