@@ -237,7 +237,7 @@ bool WebServer::start_server(quint16 port) {
                 pkgconf
             );
 
-            lubuntuci->cilogic.sync(pkgconf);
+            pkgconf->sync();
         }
     });
 
