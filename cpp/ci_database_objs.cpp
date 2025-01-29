@@ -912,8 +912,9 @@ bool PackageConf::can_check_source_upload() {
                 continue;
             }
 
-            if (jobstatus->name == "source_check" && task_ptr && !task_ptr->successful) {
-                source_check_timestamp = task_ptr->finish_time;
+            if (jobstatus->name == "source_check" && task_ptr) {
+                if (task_ptr->successful) source_check_timestamp = task_ptr->finish_time;
+                _successful_task_count--;
                 continue;
             }
         }
