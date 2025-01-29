@@ -288,6 +288,9 @@ void ensure_git_inited() {
 }
 
 void run_task_every(std::stop_token _stop_token, int interval_minutes, std::function<void()> task) {
+    if (interval_minutes < 2) interval_minutes = 2;
+    std::this_thread::sleep_for(std::chrono::minutes(interval_minutes / 2));
+
     while (!_stop_token.stop_requested()) {
         task();
         std::this_thread::sleep_for(std::chrono::minutes(interval_minutes));
