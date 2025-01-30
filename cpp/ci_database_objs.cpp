@@ -940,8 +940,6 @@ bool PackageConf::can_check_builds() {
     int _total_task_count = total_task_count();
     if (_total_task_count == 0) return false;
 
-    std::lock_guard<std::mutex> lock(*task_mutex_);
-
     std::int64_t upload_timestamp = 0;
     std::int64_t binary_check_timestamp = 0;
     std::set<std::string> valid_successful_statuses = {"pull", "tarball", "source_build", "upload", "source_check"};
