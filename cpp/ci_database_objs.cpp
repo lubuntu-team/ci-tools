@@ -958,7 +958,7 @@ bool PackageConf::can_check_builds() {
                 continue;
             }
 
-            if (jobstatus->name == "binary_check" && task_ptr) {
+            if (jobstatus->name == "build_check" && task_ptr) {
                 binary_check_timestamp = task_ptr->finish_time;
                 _total_task_count--;
                 continue;

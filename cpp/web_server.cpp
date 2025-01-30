@@ -246,7 +246,7 @@ bool WebServer::start_server(quint16 port) {
             if (!pkgconf->can_check_builds()) { continue; }
 
             task_queue->enqueue(
-                job_statuses->at("binary_check"),
+                job_statuses->at("build_check"),
                 [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
                     std::string package_version = pkgconf->upstream_version + "-0ubuntu0~ppa" + std::to_string(pkgconf->ppa_revision);
                     bool found_in_ppa = false;
