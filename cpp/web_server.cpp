@@ -573,7 +573,7 @@ bool WebServer::start_server(quint16 port) {
                         }
 
                         item[job_name + "_class"] = css_class;
-                        item[job_name + "_id"] = r->id;
+                        item[job_name + "_id"] = std::to_string(r->id);
                     } else {
                         item[job_name + "_class"] = "";
                         item[job_name + "_id"] = "";
