@@ -80,13 +80,3 @@ bool LubuntuCI::build_repo(const std::string &repo_name, std::shared_ptr<Log> lo
     }
     return success;
 }
-
-/**
- * get_repo_log():
- *   - Directly opens the repo in /srv/lubuntu-ci/repos/<repo_name>
- *   - Reads HEAD commit message
- */
-std::string LubuntuCI::get_repo_log(const std::string &repo_name)
-{
-    // FIXME: unused
-}

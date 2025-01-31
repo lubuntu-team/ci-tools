@@ -559,23 +559,24 @@ bool WebServer::start_server(quint16 port) {
                 item["upstream_commit"] = upstream_commit_str;
                 item["upstream_commit_url"] = upstream_commit_url_str;
 
-                // For each job in the map, fetch the real task and set a CSS class accordingly.
                 for (auto const & [job_name, job_ptr] : *job_statuses) {
                     auto t = r->get_task_by_jobstatus(job_ptr);
                     if (t) {
-                        std::string css_class = "bg-secondary";  // default
+                        std::string css_class = "bg-secondary";
 
                         if (t->finish_time > 0) {
                             css_class = t->successful ? "bg-success" : "bg-danger";
                         } else if (t->start_time > 0) {
-                            css_class = "bg-warning";  // started but not finished
+                            css_class = "bg-warning";
                         } else {
-                            css_class = "bg-info";     // queued but not started
+                            css_class = "bg-info";
                         }
 
                         item[job_name + "_class"] = css_class;
+                        item[job_name + "_id"] = r->id;
                     } else {
                         item[job_name + "_class"] = "";
+                        item[job_name + "_id"] = "";
                     }
                 }
 
@@ -636,47 +637,6 @@ bool WebServer::start_server(quint16 port) {
 
             std::string msg = lubuntuci->cilogic.queue_build_upload({ lubuntuci->cilogic.get_packageconf_by_id(repo) }, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
-        });
-    });
-
-    //////////////////////////////////////////
-    // /logs?repo=foo
-    //////////////////////////////////////////
-    http_server_.route("/logs", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
-        {
-            QHttpServerResponse session_response = verify_session_token(req, req.headers());
-            if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
-        }
-        auto query = req.query();
-        std::string repo = query.queryItemValue("repo").toStdString();
-
-        return QtConcurrent::run([=, this]() {
-            if (repo.empty()) {
-                std::string msg = "<html><body>No repo specified.</body></html>";
-                return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
-            }
-            std::string log_content = lubuntuci->get_repo_log(repo);
-
-            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
-            std::map<std::string,std::string> context;
-            context["title"] = "Logs for " + repo;
-
-            std::string body;
-            body += "<h2>Logs: " + repo + "</h2>";
-            body += "<pre class=\"bg-white p-2\">" + log_content + "</pre>";
-
-            context["BODY_CONTENT"] = body;
-
-            std::string final_html = TemplateRenderer::render_with_inheritance(
-                "base.html",
-                context,
-                list_context
-            );
-            if (final_html.empty()) {
-                final_html = "<html><body><h1>Log Output</h1><pre>"
-                             + log_content + "</pre></body></html>";
-            }
-            return QHttpServerResponse("text/html", QByteArray(final_html.c_str(), (int)final_html.size()));
         });
     });
 
@@ -998,6 +958,43 @@ bool WebServer::start_server(quint16 port) {
             std::string final_html = TemplateRenderer::render_with_inheritance(
                 "tasks.html",
                 scalar_context,
+                list_context
+            );
+            return QHttpServerResponse("text/html", QByteArray(final_html.c_str(), (int)final_html.size()));
+        });
+    });
+
+    //////////////////////////////////////////
+    // /log/<TASK_ID>
+    //////////////////////////////////////////
+    http_server_.route("/log/<arg>", [this, lubuntuci, job_statuses](const QString _task_id, const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+        {
+            QHttpServerResponse session_response = verify_session_token(req, req.headers());
+            if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
+        }
+        return QtConcurrent::run([=, this]() {
+            int task_id;
+            try {
+                task_id = _task_id.toInt();
+                if (task_id <= 0) {
+                    std::string msg = "<html><body><h1>Invalid task ID specified.</h1></body></html>";
+                    return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
+                }
+            } catch (...) {
+                std::string msg = "<html><body><h1>Invalid task ID specified.</h1></body></html>";
+                return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
+            }
+
+            std::string log_content = lubuntuci->cilogic.get_task_log(task_id);
+
+            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
+            std::map<std::string, std::string> context;
+            context["title"] = "Task Logs";
+            context["log"] = log_content;
+
+            std::string final_html = TemplateRenderer::render_with_inheritance(
+                "log.html",
+                context,
                 list_context
             );
             return QHttpServerResponse("text/html", QByteArray(final_html.c_str(), (int)final_html.size()));

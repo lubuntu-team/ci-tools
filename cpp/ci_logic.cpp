@@ -817,9 +817,15 @@ void CiLogic::sync(std::shared_ptr<PackageConf> pkgconf) {
     pkgconf->sync();
 }
 
-/**
- * Stub logs
- */
-std::string CiLogic::get_logs_for_repo_conf(int package_conf_id) {
-    return "Not implemented";
+std::string CiLogic::get_task_log(int task_id) {
+    QSqlQuery query(get_thread_connection());
+    query.prepare("SELECT log FROM task WHERE id = ?");
+    query.bindValue(0, task_id);
+
+    if (!ci_query_exec(&query)) qDebug() << "Error getting log for task:" << query.lastError().text();
+    while (query.next()) {
+        QString log = query.value("log").toString();
+        if (!log.isEmpty()) return log.toStdString();
+    }
+    return "";
 }

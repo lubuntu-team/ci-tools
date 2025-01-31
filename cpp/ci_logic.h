@@ -81,9 +81,6 @@ class CiLogic {
         // Function to enqueue tasks
         void enqueue(std::function<void()> task);
 
-        // Fetch logs for a specific PackageConf ID
-        std::string get_logs_for_repo_conf(int package_conf_id);
-
         std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> get_job_statuses();
         std::vector<std::shared_ptr<PackageConf>> get_packageconfs();
         std::shared_ptr<PackageConf> get_packageconf_by_id(int id);
@@ -97,6 +94,8 @@ class CiLogic {
         std::string queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
                                        std::unique_ptr<TaskQueue>& task_queue,
                                        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
+
+        std::string get_task_log(int task_id);
 
         std::vector<Release> releases;
         std::vector<Package> packages;

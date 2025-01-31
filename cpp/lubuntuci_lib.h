@@ -42,11 +42,6 @@ public:
      */
     bool build_repo(const std::string &repo_name, std::shared_ptr<Log> log = NULL);
 
-    /**
-     * Retrieve the most recent commit log from a named repo.
-     */
-    std::string get_repo_log(const std::string &repo_name);
-
     CiLogic cilogic = CiLogic();
 };
 
