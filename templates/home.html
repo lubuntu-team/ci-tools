@@ -72,7 +72,7 @@
           <tbody>
             <tr>
               {% if repo.pull_class != "" %}
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.pull_class}} text-white">
                   Pull
                 </div>
@@ -80,7 +80,7 @@
               {% endif %}
               {% if repo.tarball_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.tarball_class}} text-white">
                   Tarball
                 </div>
@@ -88,7 +88,7 @@
               {% endif %}
               {% if repo.source_build_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.source_build_class}} text-white">
                   Source Build
                 </div>
@@ -96,7 +96,7 @@
               {% endif %}
               {% if repo.upload_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.upload_class}} text-white">
                   Upload
                 </div>
@@ -105,7 +105,7 @@
             </tr>
             <tr>
               {% if repo.source_check_class != "" %}
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.source_check_class}} text-white">
                   Source Check
                 </div>
@@ -113,7 +113,7 @@
               {% endif %}
               {% if repo.build_check_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.build_check_class}} text-white">
                   Build Check
                 </div>
@@ -121,7 +121,7 @@
               {% endif %}
               {% if repo.lintian_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.lintian_class}} text-white">
                   Lintian
                 </div>
@@ -129,7 +129,7 @@
               {% endif %}
               {% if repo.britney_class != "" %}
               <td><i class="fa-solid fa-right-long" style="font-size: 1.5rem;"></i></td>
-              <td>
+              <td class="w-25">
                 <div class="justify-content-center align-items-center align-middle {{repo.britney_class}} text-white">
                   Britney
                 </div>
