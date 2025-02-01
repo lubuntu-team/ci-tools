@@ -33,22 +33,16 @@ void TaskQueue::enqueue(std::shared_ptr<JobStatus> jobstatus,
         auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                        std::chrono::system_clock::now().time_since_epoch())
                        .count();
-
-        // Create the task
         std::shared_ptr<Task> task_ptr = std::make_shared<Task>(jobstatus, now, packageconf);
-        task_ptr->func = [task_func, self_weak = std::weak_ptr<Task>(task_ptr)](std::shared_ptr<Log> log) {
-            std::shared_ptr<Task> task_locked = self_weak.lock();
-            if (task_locked) {
-                log->assign_task_context(task_locked);
+        task_ptr->func = [task_func, self_weak = std::weak_ptr<Task>(task_ptr)](std::shared_ptr<Log> log) mutable {
+            if (auto task_locked = self_weak.lock())
                 task_func(log);
-            }
         };
         packageconf->assign_task(jobstatus, task_ptr, packageconf);
-
         std::unique_lock<std::mutex> lock(tasks_mutex_);
         tasks_.emplace(task_ptr);
     }
-    cv_.notify_all(); // Notify worker threads
+    cv_.notify_all();
 }
 
 void TaskQueue::start() {
@@ -59,14 +53,12 @@ void TaskQueue::start() {
 }
 
 void TaskQueue::stop() {
-   {
-        std::unique_lock<std::mutex> tasks_lock(tasks_mutex_);
-        std::unique_lock<std::mutex> packages_lock(running_packages_mutex_);
-        std::unique_lock<std::mutex> running_tasks_lock(running_tasks_mutex_);
+    {
+        std::unique_lock<std::mutex> lock(tasks_mutex_);
         stop_ = true;
     }
-    cv_.notify_all(); // Wake up all threads
-    for (auto& worker : workers_) {
+    cv_.notify_all();
+    for (auto &worker : workers_) {
         if (worker.joinable()) {
             worker.join();
         }
@@ -88,63 +80,42 @@ void TaskQueue::worker_thread() {
     while (true) {
         std::shared_ptr<Task> task_to_execute;
         {
-            std::lock_guard<std::mutex> tasks_lock(tasks_mutex_);
+            std::unique_lock<std::mutex> lock(tasks_mutex_);
+            cv_.wait(lock, [this] { return stop_ || !tasks_.empty(); });
             if (stop_ && tasks_.empty()) return;
-
             auto it = tasks_.begin();
-            bool found_valid = false;
-            // Iterate through the set until a valid task is found
             while (it != tasks_.end()) {
+                int package_id = (*it)->get_parent_packageconf()->package->id;
                 {
-                    std::shared_ptr<Task> it_task = *it;
-                    task_to_execute = it_task;
-                }
-
-                int package_id = task_to_execute->get_parent_packageconf()->package->id;
-
-                {
-                    std::lock_guard<std::mutex> lock(running_packages_mutex_);
-                    auto running_package_it = std::find_if(running_packages_.begin(), running_packages_.end(),
-                        [&package_id](const std::shared_ptr<Package>& package) { return package->id == package_id; });
-
-                    if (running_package_it != running_packages_.end()) {
-                        ++it; // Move to the next task
+                    std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
+                    auto running_it = std::find_if(running_packages_.begin(), running_packages_.end(),
+                        [package_id](const std::shared_ptr<Package> &pkg) { return pkg->id == package_id; });
+                    if (running_it != running_packages_.end()) {
+                        ++it;
                         continue;
                     }
                 }
-
-                // Task is valid to execute
-                found_valid = true;
-                it = tasks_.erase(it);
+                task_to_execute = *it;
+                tasks_.erase(it);
                 break;
             }
-            if (!found_valid) { continue; }
         }
-
         if (!task_to_execute || !task_to_execute->func) continue;
-        else {
-            {
-                std::lock_guard<std::mutex> packages_lock(running_packages_mutex_);
-                running_packages_.insert(task_to_execute->get_parent_packageconf()->package);
-            }
-            {
-                std::lock_guard<std::mutex> tasks_lock(running_tasks_mutex_);
-                running_tasks_.insert(task_to_execute);
-            }
-        }
-
-        // Set the start time
         {
-            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-            task_to_execute->start_time = now;
+            std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
+            running_packages_.insert(task_to_execute->get_parent_packageconf()->package);
         }
-
+        {
+            std::lock_guard<std::mutex> rt_lock(running_tasks_mutex_);
+            running_tasks_.insert(task_to_execute);
+        }
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()).count();
+        task_to_execute->start_time = now;
         try {
-            task_to_execute->func(task_to_execute->log); // Execute the task
+            task_to_execute->func(task_to_execute->log);
             task_to_execute->successful = true;
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             task_to_execute->successful = false;
             std::ostringstream oss;
             oss << "Exception type: " << typeid(e).name() << "\n"
@@ -154,39 +125,27 @@ void TaskQueue::worker_thread() {
             task_to_execute->successful = false;
             task_to_execute->log->append("Unknown exception occurred");
         }
-
+        now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count();
+        task_to_execute->finish_time = now;
         {
-            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::system_clock::now().time_since_epoch())
-                      .count();
-            task_to_execute->finish_time = now;
-        }
-
-        {
-            // Remove the task from running_tasks_
-            std::lock_guard<std::mutex> lock(running_tasks_mutex_);
+            std::lock_guard<std::mutex> rt_lock(running_tasks_mutex_);
             int id = task_to_execute->id;
-            auto running_task_it = std::find_if(running_tasks_.begin(), running_tasks_.end(),
-                [&id](const std::shared_ptr<Task>& task) { return task->id == id; });
-
-            if (running_task_it != running_tasks_.end()) {
-                running_tasks_.erase(running_task_it);
+            auto it = std::find_if(running_tasks_.begin(), running_tasks_.end(),
+                [id](const std::shared_ptr<Task> &task) { return task->id == id; });
+            if (it != running_tasks_.end()) {
+                running_tasks_.erase(it);
             }
         }
-
         {
-            // Remove packageconf from running_packages_ by id
-            std::lock_guard<std::mutex> lock(running_packages_mutex_);
+            std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
             int package_id = task_to_execute->get_parent_packageconf()->package->id;
-            auto running_package_it = std::find_if(running_packages_.begin(), running_packages_.end(),
-                [&package_id](const std::shared_ptr<Package>& package) { return package->id == package_id; });
-
-            if (running_package_it != running_packages_.end()) {
-                running_packages_.erase(running_package_it);
+            auto it = std::find_if(running_packages_.begin(), running_packages_.end(),
+                [package_id](const std::shared_ptr<Package> &pkg) { return pkg->id == package_id; });
+            if (it != running_packages_.end()) {
+                running_packages_.erase(it);
             }
         }
-
-        // Save to the database at the end
         task_to_execute->save(0);
     }
 }

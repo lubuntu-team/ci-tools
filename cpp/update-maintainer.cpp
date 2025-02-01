@@ -1,6 +1,4 @@
-// cpp/update-maintainer.cpp
-
-// Copyright (C) 2024 Simon Quigley <tsimonq2@ubuntu.com>
+// Copyright (C) 2024-2025 Simon Quigley <tsimonq2@ubuntu.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "lubuntuci_lib.h"
+#include "ci_logic.h"
 #include <iostream>
 
 int main(int argc, char** argv) {

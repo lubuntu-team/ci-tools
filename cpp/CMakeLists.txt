@@ -40,14 +40,12 @@ set(UUID_LIB "uuid")
 # 1. The main library: lubuntuci_lib
 #
 add_library(lubuntuci_lib SHARED
-    common.cpp
     utilities.cpp
     db_common.cpp
     git_common.cpp
     sources_parser.cpp
     ci_logic.cpp
     ci_database_objs.cpp
-    lubuntuci_lib.cpp
     task_queue.cpp
     template_renderer.cpp
     web_server.cpp

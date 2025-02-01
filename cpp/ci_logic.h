@@ -32,11 +32,8 @@
 #include <QSqlDatabase>
 #include <yaml-cpp/yaml.h>
 
-struct CiProject;
+namespace fs = std::filesystem;
 
-/**
- * Data describing one package to pull/build/etc.
- */
 struct CiProject {
     std::string name;
     std::string version;
@@ -45,78 +42,98 @@ struct CiProject {
     std::string upstream_url;
     std::string packaging_url;
     std::optional<std::string> packaging_branch;
-    std::filesystem::path main_tarball;
+    fs::path main_tarball;
     bool large = false;
-
-    // These get populated during build
+    // These get populated during build:
     std::vector<std::string> changes_files;
     std::vector<std::string> devel_changes_files;
 };
 
 class CiLogic {
-    public:
-        // Initialize global configurations
-        void init_global();
+public:
+    // Initialize global config and database
+    void init_global();
 
-        // Load YAML configuration from a given path
-        YAML::Node load_yaml_config(const std::filesystem::path &config_path);
+    // Load YAML config from a given path
+    YAML::Node load_yaml_config(const fs::path &config_path);
 
-        // Convert a YAML node to a CiProject structure
-        CiProject yaml_to_project(const YAML::Node &pkg_node);
+    // Convert a YAML node to a CiProject
+    CiProject yaml_to_project(const YAML::Node &pkg_node);
 
-        bool pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = NULL);
-        bool create_project_tarball(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = NULL);
-        std::tuple<bool, std::set<std::string>> build_project(std::shared_ptr<PackageConf> proj, std::shared_ptr<Log> log = NULL);
-        bool upload_and_lint(std::shared_ptr<PackageConf> &proj, const std::set<std::string> changes_files, bool skip_dput, std::shared_ptr<Log> log = NULL);
+    // Pipeline functions
+    bool pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = nullptr);
+    bool create_project_tarball(std::shared_ptr<PackageConf> &proj, std::shared_ptr<Log> log = nullptr);
+    std::tuple<bool, std::set<std::string>> build_project(std::shared_ptr<PackageConf> proj, std::shared_ptr<Log> log = nullptr);
+    bool upload_and_lint(std::shared_ptr<PackageConf> &proj,
+                           const std::set<std::string> changes_files,
+                           bool skip_dput,
+                           std::shared_ptr<Log> log = nullptr);
 
-        // Perform cleanup and summarize the build process
-        void do_summary(bool skip_cleanup);
+    // Summary & cleanup
+    void do_summary(bool skip_cleanup);
 
-        // Process the entire pipeline for a given PackageConf ID
-        void process_entire_pipeline(std::shared_ptr<PackageConf> &proj, bool skip_dput, bool skip_cleanup);
+    // Orchestrate entire pipeline
+    void process_entire_pipeline(std::shared_ptr<PackageConf> &proj,
+                                 bool skip_dput,
+                                 bool skip_cleanup);
 
-        // Retrieve all PackageConf entries from the database
-        std::vector<std::shared_ptr<PackageConf>> get_config(const std::string &repo_name = "", int page = 0, int per_page = 0, const std::string& sort_by = "", const std::string& sort_order = "");
+    // Retrieve PackageConf entries (with optional pagination/sorting)
+    std::vector<std::shared_ptr<PackageConf>> get_config(const std::string &repo_name = "",
+                                                         int page = 0,
+                                                         int per_page = 0,
+                                                         const std::string &sort_by = "",
+                                                         const std::string &sort_order = "");
 
-        // Function to enqueue tasks
-        void enqueue(std::function<void()> task);
+    // Enqueue a task (wrapper)
+    void enqueue(std::function<void()> task);
 
-        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> get_job_statuses();
-        std::vector<std::shared_ptr<PackageConf>> get_packageconfs();
-        std::shared_ptr<PackageConf> get_packageconf_by_id(int id);
-        std::vector<std::shared_ptr<PackageConf>> get_packageconfs_by_ids(std::set<int> ids);
-        void set_packageconfs(std::vector<std::shared_ptr<PackageConf>> _pkgconfs);
-        void sync(std::shared_ptr<PackageConf> pkgconf);
+    // Job status and PackageConf getters
+    std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> get_job_statuses();
+    std::vector<std::shared_ptr<PackageConf>> get_packageconfs();
+    std::shared_ptr<PackageConf> get_packageconf_by_id(int id);
+    std::vector<std::shared_ptr<PackageConf>> get_packageconfs_by_ids(std::set<int> ids);
+    void set_packageconfs(std::vector<std::shared_ptr<PackageConf>> _pkgconfs);
+    void sync(std::shared_ptr<PackageConf> pkgconf);
 
-        std::string queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
-                                       std::unique_ptr<TaskQueue>& task_queue,
-                                       std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
-        std::string queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
-                                       std::unique_ptr<TaskQueue>& task_queue,
-                                       std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
+    // Queue tasks
+    std::string queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>> repos,
+                                   std::unique_ptr<TaskQueue>& task_queue,
+                                   std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
+    std::string queue_build_upload(std::vector<std::shared_ptr<PackageConf>> repos,
+                                   std::unique_ptr<TaskQueue>& task_queue,
+                                   std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses);
 
-        std::string get_task_log(int task_id);
+    // Get a task’s log
+    std::string get_task_log(int task_id);
 
-        std::vector<Release> releases;
-        std::vector<Package> packages;
-        std::vector<Branch> branches;
+    std::vector<std::shared_ptr<PackageConf>> list_known_repos(int page = 0,
+        int per_page = 0,
+        const std::string &sort_by = "",
+        const std::string &sort_order = "");
+    bool pull_repo_by_name(const std::string &repo_name, std::shared_ptr<Log> log = nullptr);
+    bool create_project_tarball_by_name(const std::string &repo_name, std::shared_ptr<Log> log = nullptr);
+    bool build_repo_by_name(const std::string &repo_name, std::shared_ptr<Log> log = nullptr);
 
-    private:
-        void debuild_package(const fs::path &packaging_dir, std::shared_ptr<Log> log);
+    // These come from the config/DB
+    std::vector<Release> releases;
+    std::vector<Package> packages;
+    std::vector<Branch> branches;
 
-        QSqlDatabase p_db;
+private:
+    void debuild_package(const fs::path &packaging_dir, std::shared_ptr<Log> log);
 
-        mutable std::mutex packageconfs_mutex_;
-        std::vector<std::shared_ptr<PackageConf>> packageconfs;
-        std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> _cached_job_statuses;
+    QSqlDatabase p_db;
+    mutable std::mutex packageconfs_mutex_;
+    std::vector<std::shared_ptr<PackageConf>> packageconfs;
+    std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> _cached_job_statuses;
 
-        struct package_conf_item {
-            std::shared_ptr<PackageConf> first_pkgconf;
-            std::shared_ptr<Task> first_pull_task = std::make_shared<Task>();
-            std::shared_ptr<Task> first_tarball_task = std::make_shared<Task>();
-            std::shared_ptr<GitCommit> packaging_commit = std::make_shared<GitCommit>();
-            std::shared_ptr<GitCommit> upstream_commit = std::make_shared<GitCommit>();
-        };
+    struct package_conf_item {
+        std::shared_ptr<PackageConf> first_pkgconf;
+        std::shared_ptr<Task> first_pull_task = std::make_shared<Task>();
+        std::shared_ptr<Task> first_tarball_task = std::make_shared<Task>();
+        std::shared_ptr<GitCommit> packaging_commit = std::make_shared<GitCommit>();
+        std::shared_ptr<GitCommit> upstream_commit = std::make_shared<GitCommit>();
+    };
 };
 
 #endif // CI_LOGIC_H

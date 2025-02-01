@@ -18,11 +18,57 @@
 #include <string>
 #include <filesystem>
 #include <mutex>
+#include <regex>
 #include <future>
+#include <shared_mutex>
 #include <semaphore>
 #include <functional>
-
 #include <git2.h>
+#include <QProcess>
+
+namespace fs = std::filesystem;
+
+class Task;
+
+// Time utilities
+std::string get_current_utc_time(const std::string& format);
+std::time_t to_time_t(const std::filesystem::file_time_type& ftime);
+
+class Log {
+private:
+    std::string data = "";
+    mutable std::shared_mutex lock_;
+    std::weak_ptr<Task> task_context_;
+    std::string last_data_str = "";
+
+public:
+    void append(const std::string& str) {
+        std::unique_lock lock(lock_);
+        std::string log_str = str.ends_with('\n') ? str : str + '\n';
+        if (str.empty() || last_data_str == log_str) { return; }
+        else if (str.contains("dpkg-source: warning: ignoring deletion of file")) { return; }
+        data += std::format("[{}] {}", get_current_utc_time("%Y-%m-%dT%H:%M:%SZ"), log_str);
+        last_data_str = log_str;
+    }
+
+    void set_log(const std::string& str) {
+        std::unique_lock lock(lock_);
+        data = str;
+    }
+
+    std::string get() const {
+        std::shared_lock lock(lock_);
+        return std::regex_replace(data, std::regex(R"(^\s+)"), "");
+    }
+
+    void assign_task_context(std::shared_ptr<Task> task) {
+        task_context_ = task;
+    }
+
+    std::shared_ptr<Task> get_task_context() const {
+        return task_context_.lock();
+    }
+};
 
 // Function to read the entire content of a file into a string
 std::string read_file(const std::filesystem::path& filePath);
@@ -49,10 +95,6 @@ std::filesystem::path create_temp_directory();
 // Function to copy a directory recursively
 void copy_directory(const std::filesystem::path& source, const std::filesystem::path& destination);
 
-// Time utilities
-std::string get_current_utc_time(const std::string& format);
-std::time_t to_time_t(const std::filesystem::file_time_type& ftime);
-
 // String utilities
 std::vector<std::string> split_string(const std::string& input, const std::string& delimiter);
 std::string remove_suffix(const std::string& input, const std::string& suffix);
@@ -65,3 +107,25 @@ std::pair<int, bool> get_version_from_codename(const std::string& codename);
 void ensure_git_inited();
 
 void run_task_every(std::stop_token _stop_token, int interval_minutes, std::function<void()> task);
+
+// Logger functions
+extern bool verbose;
+void log_info(const std::string &msg);
+void log_warning(const std::string &msg);
+void log_error(const std::string &msg);
+void log_verbose(const std::string &msg);
+
+// Function to run a command with optional working directory and show output
+bool run_command(const std::vector<std::string> &cmd,
+                 const std::optional<fs::path> &cwd = std::nullopt,
+                 bool show_output = false,
+                 std::shared_ptr<Log> log = nullptr);
+
+// Function to extract excluded files from a copyright file
+std::vector<std::string> extract_files_excluded(const std::string& filepath);
+
+// Function to create a tarball
+void create_tarball(const std::string& tarballPath,
+                    const std::string& directory,
+                    const std::vector<std::string>& exclusions,
+                    std::shared_ptr<Log> log = nullptr);

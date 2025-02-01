@@ -27,7 +27,7 @@
 #include <QSqlDatabase>
 #include <yaml-cpp/yaml.h>
 
-#include "common.h"
+#include "utilities.h"
 
 class Person {
 public:

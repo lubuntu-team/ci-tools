@@ -18,6 +18,8 @@
 #include "sources_parser.h"
 #include "naive_bayes_classifier.h"
 #include "db_common.h"
+#include "template_renderer.h"
+#include "ci_logic.h"
 
 // Qt includes
 #include <QtHttpServer/QHttpServer>
@@ -56,10 +58,6 @@
 #include "source_package_publishing_history.h"
 #include "build.h"
 #include "binary_package_publishing_history.h"
-
-// Local includes
-#include "lubuntuci_lib.h"
-#include "template_renderer.h"
 
 constexpr QHttpServerResponder::StatusCode StatusCodeFound = QHttpServerResponder::StatusCode::Found;
 
@@ -131,7 +129,8 @@ WebServer::WebServer(QObject *parent) : QObject(parent) {}
 
     QHttpServerResponse bad_response(StatusCodeFound);
     QHttpHeaders bad_response_headers;
-    bad_response_headers.replaceOrAppend(QHttpHeaders::WellKnownHeader::Location, "/unauthorized?base_url=" + base_url + "&redirect_to=" + current_path);
+    bad_response_headers.replaceOrAppend(QHttpHeaders::WellKnownHeader::Location,
+                                          "/unauthorized?base_url=" + base_url + "&redirect_to=" + current_path);
     bad_response.setHeaders(bad_response_headers);
 
     return bad_response;
@@ -174,14 +173,14 @@ bool WebServer::start_server(quint16 port) {
     }
     archive proposed = proposed_opt.value();
 
-    std::shared_ptr<PackageConf> _tmp_pkg_conf = std::make_shared<PackageConf>();
-    std::shared_ptr<LubuntuCI> lubuntuci = std::make_shared<LubuntuCI>();
-    std::vector<std::shared_ptr<PackageConf>> all_repos = lubuntuci->list_known_repos();
+    // Use our new list_known_repos() method from CiLogic
+    std::shared_ptr<CiLogic> cilogic = std::make_shared<CiLogic>();
+    std::vector<std::shared_ptr<PackageConf>> all_repos = cilogic->list_known_repos();
     task_queue = std::make_unique<TaskQueue>(6);
-    std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses = lubuntuci->cilogic.get_job_statuses();
+    std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> job_statuses = cilogic->get_job_statuses();
     task_queue->start();
 
-    // Load initial tokens
+    // Load initial tokens from the database
     {
         QSqlQuery load_tokens(get_thread_connection());
         load_tokens.prepare("SELECT person.id, person.username, person.logo_url, person_token.token, person_token.expiry_date FROM person INNER JOIN person_token ON person.id = person_token.person_id");
@@ -199,12 +198,12 @@ bool WebServer::start_server(quint16 port) {
         }
     }
 
-    expire_tokens_thread_ = std::jthread(run_task_every, 60, [this, lubuntuci] {
+    expire_tokens_thread_ = std::jthread(run_task_every, 60, [this, cilogic] {
         QSqlQuery expired_tokens(get_thread_connection());
         QString current_time = QDateTime::currentDateTime().toString(Qt::ISODate);
 
         expired_tokens.prepare("DELETE FROM person_token WHERE expiry_date < :current_time");
-        expired_tokens.bindValue(":current_time", QDateTime::currentDateTime().toString(Qt::ISODate));
+        expired_tokens.bindValue(":current_time", current_time);
         ci_query_exec(&expired_tokens);
         for (auto it = _active_tokens.begin(); it != _active_tokens.end();) {
             if (it.value() <= QDateTime::currentDateTime()) it = _active_tokens.erase(it);
@@ -216,10 +215,9 @@ bool WebServer::start_server(quint16 port) {
         }
     });
 
-    process_sources_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, lubuntuci, job_statuses] {
+    process_sources_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, cilogic, job_statuses] {
         for (auto pkgconf : all_repos) {
-            if (!pkgconf->can_check_source_upload()) { continue; }
-
+            if (!pkgconf->can_check_source_upload()) continue;
             task_queue->enqueue(
                 job_statuses->at("source_check"),
                 [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
@@ -229,22 +227,17 @@ bool WebServer::start_server(quint16 port) {
                         found_in_ppa = true;
                         break;
                     }
-
-                    if (!found_in_ppa) {
-                        throw std::runtime_error("Not found in the PPA.");
-                    }
+                    if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
                 },
                 pkgconf
             );
-
             pkgconf->sync();
         }
     });
 
-    process_binaries_thread_ = std::jthread(run_task_every, 15, [this, all_repos, proposed, lubuntuci, job_statuses] {
+    process_binaries_thread_ = std::jthread(run_task_every, 15, [this, all_repos, proposed, cilogic, job_statuses] {
         for (auto pkgconf : all_repos) {
-            if (!pkgconf->can_check_builds()) { continue; }
-
+            if (!pkgconf->can_check_builds()) continue;
             task_queue->enqueue(
                 job_statuses->at("build_check"),
                 [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
@@ -279,7 +272,7 @@ bool WebServer::start_server(quint16 port) {
     ////////////////////////////////////////////////////////////////
     // /unauthorized?base_url=<base_url>&redirect_to=<redirect_to>
     ////////////////////////////////////////////////////////////////
-    http_server_.route("/unauthorized", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/unauthorized", [this, cilogic](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         // Extract data up front
         auto query = req.query();
         QString base_url = query.queryItemValue("base_url");
@@ -335,7 +328,7 @@ bool WebServer::start_server(quint16 port) {
     /////////////////
     // /authcallback
     /////////////////
-    http_server_.route("/authcallback", [this, lubuntuci](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/authcallback", [this, cilogic](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         // Extract data up front
         auto query = req.query();
         QString base_url = query.queryItemValue("base_url");
@@ -476,7 +469,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // Route "/"
     //////////////////////////////////////////
-    http_server_.route("/", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -492,13 +485,13 @@ bool WebServer::start_server(quint16 port) {
                                  : query.queryItemValue("sort_order").toStdString();
 
         return QtConcurrent::run([=, this]() {
-            auto all_repos = lubuntuci->list_known_repos();
+            auto all_repos = cilogic->list_known_repos();
             int total_size = static_cast<int>(all_repos.size());
             int total_pages = (per_page > 0)
                               ? (total_size + per_page - 1) / per_page
                               : 1;
 
-            auto repos = lubuntuci->list_known_repos(page, per_page, sort_by, sort_order);
+            auto repos = cilogic->list_known_repos(page, per_page, sort_by, sort_order);
             if (repos.empty() && total_size == 0) {
                 std::string err_html = R"(
 <html>
@@ -519,37 +512,31 @@ bool WebServer::start_server(quint16 port) {
                 {"total_pages", std::to_string(total_pages)}
             };
             std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
-
             std::vector<std::map<std::string, std::string>> reposVec;
             for (const auto &r : repos) {
                 std::map<std::string, std::string> item;
                 std::string packaging_commit_str;
                 std::string upstream_commit_str;
-
                 if (r->packaging_commit) {
                     std::string commit_summary = r->packaging_commit->commit_summary;
-                    if (commit_summary.size() > 40) {
+                    if (commit_summary.size() > 40)
                         commit_summary = commit_summary.substr(0, 37) + "...";
-                    }
                     packaging_commit_str = r->packaging_commit->commit_hash.substr(0, 7) +
                         std::format(" ({:%Y-%m-%d %H:%M:%S %Z})<br />", r->packaging_commit->commit_datetime) +
                         commit_summary;
                 }
                 if (r->upstream_commit) {
                     std::string commit_summary = r->upstream_commit->commit_summary;
-                    if (commit_summary.size() > 40) {
+                    if (commit_summary.size() > 40)
                         commit_summary = commit_summary.substr(0, 37) + "...";
-                    }
                     upstream_commit_str = r->upstream_commit->commit_hash.substr(0, 7) +
                         std::format(" ({:%Y-%m-%d %H:%M:%S %Z})<br />", r->upstream_commit->commit_datetime) +
                         commit_summary;
                 }
-
                 std::string packaging_commit_url_str = (r->package ? r->package->packaging_browser : "") +
                                                        (r->packaging_commit ? r->packaging_commit->commit_hash : "");
                 std::string upstream_commit_url_str = (r->package ? r->package->upstream_browser : "") +
                                                       (r->upstream_commit ? r->upstream_commit->commit_hash : "");
-
                 item["id"] = std::to_string(r->id);
                 item["name"] = r->package->name;
                 item["branch_name"] = r->branch->name;
@@ -597,7 +584,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull?repo=<id>
     //////////////////////////////////////////
-    http_server_.route("/pull", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -612,7 +599,7 @@ bool WebServer::start_server(quint16 port) {
             }
             int repo = std::stoi(repo_string.toStdString());
 
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball({ lubuntuci->cilogic.get_packageconf_by_id(repo) }, task_queue, job_statuses);
+            std::string msg = cilogic->queue_pull_tarball({ cilogic->get_packageconf_by_id(repo) }, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -620,7 +607,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build?repo=<id>
     //////////////////////////////////////////
-    http_server_.route("/build", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -635,7 +622,7 @@ bool WebServer::start_server(quint16 port) {
             }
             int repo = std::stoi(repo_string.toStdString());
 
-            std::string msg = lubuntuci->cilogic.queue_build_upload({ lubuntuci->cilogic.get_packageconf_by_id(repo) }, task_queue, job_statuses);
+            std::string msg = cilogic->queue_build_upload({ cilogic->get_packageconf_by_id(repo) }, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -643,7 +630,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-selected?repos=<ids>
     //////////////////////////////////////////
-    http_server_.route("/pull-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-selected", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -667,7 +654,7 @@ bool WebServer::start_server(quint16 port) {
                 })
             );
 
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
+            std::string msg = cilogic->queue_pull_tarball(cilogic->get_packageconfs_by_ids(repos), task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -675,7 +662,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build-selected?repos=foo,bar,baz
     //////////////////////////////////////////
-    http_server_.route("/build-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build-selected", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -699,7 +686,7 @@ bool WebServer::start_server(quint16 port) {
                 })
             );
 
-            std::string msg = lubuntuci->cilogic.queue_build_upload(lubuntuci->cilogic.get_packageconfs_by_ids(repos), task_queue, job_statuses);
+            std::string msg = cilogic->queue_build_upload(cilogic->get_packageconfs_by_ids(repos), task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -707,7 +694,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-and-build-selected?repos=foo,bar,baz
     //////////////////////////////////////////
-    http_server_.route("/pull-and-build-selected", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-and-build-selected", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -730,11 +717,11 @@ bool WebServer::start_server(quint16 port) {
                     return std::stoi(s);
                 })
             );
-            auto pkgconfs = lubuntuci->cilogic.get_packageconfs_by_ids(repos);
+            auto pkgconfs = cilogic->get_packageconfs_by_ids(repos);
             for (auto pkgconf : pkgconfs) pkgconf->clear_tasks();
 
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball(pkgconfs, task_queue, job_statuses);
-            msg += lubuntuci->cilogic.queue_build_upload(pkgconfs, task_queue, job_statuses);
+            std::string msg = cilogic->queue_pull_tarball(pkgconfs, task_queue, job_statuses);
+            msg += cilogic->queue_build_upload(pkgconfs, task_queue, job_statuses);
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
     });
@@ -742,13 +729,13 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-all
     //////////////////////////////////////////
-    http_server_.route("/pull-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-all", [this, cilogic, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball(all_repos, task_queue, job_statuses);
+            std::string msg = cilogic->queue_pull_tarball(all_repos, task_queue, job_statuses);
 
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
@@ -757,13 +744,13 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /build-all
     //////////////////////////////////////////
-    http_server_.route("/build-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/build-all", [this, cilogic, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
-            std::string msg = lubuntuci->cilogic.queue_build_upload(all_repos, task_queue, job_statuses);
+            std::string msg = cilogic->queue_build_upload(all_repos, task_queue, job_statuses);
 
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
@@ -772,15 +759,15 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /pull-and-build-all
     //////////////////////////////////////////
-    http_server_.route("/pull-and-build-all", [this, lubuntuci, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/pull-and-build-all", [this, cilogic, all_repos, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
         }
         return QtConcurrent::run([=, this]() {
             for (auto pkgconf : all_repos) pkgconf->clear_tasks();
-            std::string msg = lubuntuci->cilogic.queue_pull_tarball(all_repos, task_queue, job_statuses);
-            msg += lubuntuci->cilogic.queue_build_upload(all_repos, task_queue, job_statuses);
+            std::string msg = cilogic->queue_pull_tarball(all_repos, task_queue, job_statuses);
+            msg += cilogic->queue_build_upload(all_repos, task_queue, job_statuses);
 
             return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
         });
@@ -789,7 +776,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // Serve static files from /static/<arg>
     //////////////////////////////////////////
-    http_server_.route("/static/<arg>", [this, lubuntuci, job_statuses](const QString filename) -> QHttpServerResponse {
+    http_server_.route("/static/<arg>", [this, cilogic, job_statuses](const QString filename) -> QHttpServerResponse {
         QString sanitized_filename = filename;
         if (filename.contains("..") || filename.contains("../")) {
             return QHttpServerResponse(QHttpServerResponder::StatusCode::BadRequest);
@@ -827,7 +814,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /graph
     //////////////////////////////////////////
-    http_server_.route("/graph", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/graph", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -875,7 +862,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /tasks
     //////////////////////////////////////////
-    http_server_.route("/tasks", [this, lubuntuci, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/tasks", [this, cilogic, job_statuses](const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -911,7 +898,7 @@ bool WebServer::start_server(quint16 port) {
                 title_prefix = "Completed";
                 // gather tasks that have start_time > 0 and finish_time > 0
                 std::vector<std::shared_ptr<Task>> tasks_vector;
-                auto pkgconfs = lubuntuci->cilogic.get_packageconfs();
+                auto pkgconfs = cilogic->get_packageconfs();
                 for (auto &pkgconf : pkgconfs) {
                     for (auto &j : *job_statuses) {
                         if (!j.second) {
@@ -967,7 +954,7 @@ bool WebServer::start_server(quint16 port) {
     //////////////////////////////////////////
     // /log/<TASK_ID>
     //////////////////////////////////////////
-    http_server_.route("/log/<arg>", [this, lubuntuci, job_statuses](const QString _task_id, const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
+    http_server_.route("/log/<arg>", [this, cilogic, job_statuses](const QString _task_id, const QHttpServerRequest &req) -> QFuture<QHttpServerResponse> {
         {
             QHttpServerResponse session_response = verify_session_token(req, req.headers());
             if (session_response.statusCode() == StatusCodeFound) return QtConcurrent::run([response = std::move(session_response)]() mutable { return std::move(response); });
@@ -984,19 +971,12 @@ bool WebServer::start_server(quint16 port) {
                 std::string msg = "<html><body><h1>Invalid task ID specified.</h1></body></html>";
                 return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
             }
-
-            std::string log_content = lubuntuci->cilogic.get_task_log(task_id);
-
-            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
+            std::string log_content = cilogic->get_task_log(task_id);
             std::map<std::string, std::string> context;
+            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
             context["title"] = "Task Logs";
             context["log"] = log_content;
-
-            std::string final_html = TemplateRenderer::render_with_inheritance(
-                "log.html",
-                context,
-                list_context
-            );
+            std::string final_html = TemplateRenderer::render_with_inheritance("log.html", context, list_context);
             return QHttpServerResponse("text/html", QByteArray(final_html.c_str(), (int)final_html.size()));
         });
     });
@@ -1011,7 +991,6 @@ bool WebServer::start_server(quint16 port) {
         key_file.open(QIODevice::ReadOnly);
         ssl_config.setPrivateKey(QSslKey(&key_file, QSsl::Rsa, QSsl::Pem));
         key_file.close();
-
         ssl_config.setPeerVerifyMode(QSslSocket::VerifyNone);
         ssl_config.setProtocol(QSsl::TlsV1_3);
         ssl_server_.setSslConfiguration(ssl_config);

@@ -6,7 +6,7 @@
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// but WITHOUT ANY WARRANTY, without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
@@ -15,8 +15,6 @@
 
 #include "task_queue.h"
 #include "ci_logic.h"
-#include "lubuntuci_lib.h"
-#include "common.h"
 #include "utilities.h"
 #include "db_common.h"
 #include "git_common.h"
@@ -530,7 +528,7 @@ void CiLogic::process_entire_pipeline(std::shared_ptr<PackageConf> &proj,
         bool pull_success = pull_project(proj);
         bool tarball_success = create_project_tarball(proj);
         const auto [build_success, changes_files] = build_project(proj);
-        upload_and_lint(proj, changes_files, skip_dput);
+        upload_and_lint(proj, changes_files, skip_dput, std::make_shared<Log>());
         do_summary(skip_cleanup);
         log_info("Pipeline done for " + proj->package->name);
     } catch(std::exception &ex) {
@@ -828,4 +826,37 @@ std::string CiLogic::get_task_log(int task_id) {
         if (!log.isEmpty()) return log.toStdString();
     }
     return "";
+}
+
+std::vector<std::shared_ptr<PackageConf>> CiLogic::list_known_repos(int page,
+                                                                    int per_page,
+                                                                    const std::string &sort_by,
+                                                                    const std::string &sort_order) {
+    init_global();
+    if (page != 0 && per_page != 0 && !sort_by.empty() && !sort_order.empty()) return get_config("", page, per_page, sort_by, sort_order);
+    else return get_config();
+}
+
+bool CiLogic::pull_repo_by_name(const std::string &repo_name, std::shared_ptr<Log> log) {
+    init_global();
+    auto pkgconfs = get_config(repo_name);
+    if (pkgconfs.empty()) return false;
+    return pull_project(pkgconfs.at(0), log);
+}
+
+bool CiLogic::create_project_tarball_by_name(const std::string &repo_name, std::shared_ptr<Log> log) {
+    init_global();
+    auto pkgconfs = get_config(repo_name);
+    if (pkgconfs.empty()) return false;
+    return create_project_tarball(pkgconfs.at(0), log);
+}
+
+bool CiLogic::build_repo_by_name(const std::string &repo_name, std::shared_ptr<Log> log) {
+    init_global();
+    bool success = true;
+    for (auto pkgconf : get_config(repo_name)) {
+        auto [build_ok, changes_files] = build_project(pkgconf, log);
+        success = success && build_ok && upload_and_lint(pkgconf, changes_files, false, log);
+    }
+    return success;
 }
