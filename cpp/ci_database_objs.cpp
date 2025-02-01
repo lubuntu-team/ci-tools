@@ -43,17 +43,16 @@ std::vector<Release> Release::get_releases() {
     QString query_str = "SELECT id, version, codename, isDefault FROM release;";
     QSqlQuery query(query_str, get_thread_connection());
     while (query.next()) {
-        Release current_release(query.value("id").toInt(), query.value("version").toInt(),
-                                query.value("codename").toString().toStdString(),
-                                query.value("isDefault").toBool());
-        result.emplace_back(current_release);
+        result.emplace_back(Release(query.value("id").toInt(),
+                                     query.value("version").toInt(),
+                                     query.value("codename").toString().toStdString(),
+                                     query.value("isDefault").toBool()));
     }
     return result;
 }
 
 Release Release::get_release_by_id(int id) {
     QSqlQuery query(get_thread_connection());
-
     query.prepare("SELECT id, version, codename, isDefault FROM release WHERE id = ? LIMIT 1");
     query.bindValue(0, id);
     if (!ci_query_exec(&query)) {
@@ -61,15 +60,10 @@ Release Release::get_release_by_id(int id) {
         return Release();
     }
     if (query.next()) {
-        int release_id = query.value(0).toInt();
-        int version = query.value(1).toInt();
-        QString codename = query.value(2).toString();
-        bool isDefault = query.value(3).toBool();
-
-        // Create and return the Release object
-        return Release(release_id, version, codename.toStdString(), isDefault);
-    } else {
-        std::cout << "No release found for ID: " << id << "\n";
+        return Release(query.value(0).toInt(),
+                       query.value(1).toInt(),
+                       query.value(2).toString().toStdString(),
+                       query.value(3).toBool());
     }
 
     // Return an empty Release object if no match is found
@@ -156,12 +150,12 @@ Package Package::get_package_by_id(int id) {
         return Package();
     }
     if (query.next()) {
-        Package current_package(query.value("id").toInt(), query.value("name").toString().toStdString(),
-                                query.value("large").toBool(),
-                                query.value("upstream_url").toString().toStdString(),
-                                query.value("packaging_branch").toString().toStdString(),
-                                query.value("packaging_url").toString().toStdString());
-        return current_package;
+        return Package(query.value("id").toInt(),
+                       query.value("name").toString().toStdString(),
+                       query.value("large").toBool(),
+                       query.value("upstream_url").toString().toStdString(),
+                       query.value("packaging_branch").toString().toStdString(),
+                       query.value("packaging_url").toString().toStdString());
     }
     return Package();
 }
@@ -236,22 +230,12 @@ bool Package::set_packages(YAML::Node& packages) {
     return true;
 }
 
-std::string Package::transform_url(const std::string& url) {
-    // Precompiled regex patterns and their replacements
+std::string Package::transform_url(const std::string &url) {
     static const std::vector<std::pair<std::regex, std::string>> patterns = {
-        // git.launchpad.net: Append "/commit/?id="
         { std::regex(R"(^(https://git\.launchpad\.net/.*)$)"), "$1/commit/?id=" },
-
-        // code.qt.io: Replace "/qt/" with "/cgit/qt/" and append "/commit/?id="
         { std::regex(R"(^https://code\.qt\.io/qt/([^/]+\.git)$)"), "https://code.qt.io/cgit/qt/$1/commit/?id=" },
-
-        // invent.kde.org: Replace ".git" with "/-/commit/"
         { std::regex(R"(^https://invent\.kde\.org/([^/]+/[^/]+)\.git$)"), "https://invent.kde.org/$1/-/commit/" },
-
-        // git.lubuntu.me: Replace ".git" with "/commit/"
         { std::regex(R"(^https://git\.lubuntu\.me/([^/]+/[^/]+)\.git$)"), "https://git.lubuntu.me/$1/commit/" },
-
-        // gitlab.kitware.com: Replace ".git" with "/-/commit/"
         { std::regex(R"(^https://gitlab\.kitware\.com/([^/]+/[^/]+)\.git$)"), "https://gitlab.kitware.com/$1/-/commit/" },
     };
 
@@ -279,10 +263,10 @@ std::vector<Branch> Branch::get_branches() {
     QString query_str = "SELECT id, name, upload_target, upload_target_ssh FROM branch";
     QSqlQuery query(query_str, get_thread_connection());
     while (query.next()) {
-        Branch current_branch(query.value("id").toInt(), query.value("name").toString().toStdString(),
-                                query.value("upload_target").toString().toStdString(),
-                                query.value("upload_target_ssh").toString().toStdString());
-        result.emplace_back(current_branch);
+        result.emplace_back(Branch(query.value("id").toInt(),
+                                   query.value("name").toString().toStdString(),
+                                   query.value("upload_target").toString().toStdString(),
+                                   query.value("upload_target_ssh").toString().toStdString()));
     }
     return result;
 }
@@ -897,81 +881,37 @@ void PackageConf::sync() {
 }
 
 bool PackageConf::can_check_source_upload() {
-    int _total_task_count = total_task_count();
-    if (_total_task_count == 0) return false;
-
-    std::int64_t upload_timestamp = 0;
-    std::int64_t source_check_timestamp = 0;
-    std::set<std::string> valid_successful_statuses = {"pull", "tarball", "source_build", "upload"};
-    {
-        std::lock_guard<std::mutex> lock(*task_mutex_);
-        for (auto &kv : jobstatus_task_map_) {
-            auto &jobstatus = kv.first;
-            auto &task_ptr = kv.second;
-
-            if (valid_successful_statuses.contains(jobstatus->name)) _total_task_count--;
-
-            if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
-                upload_timestamp = task_ptr->finish_time;
-                continue;
-            }
-
-            if (jobstatus->name == "source_check" && task_ptr) {
-                source_check_timestamp = task_ptr->finish_time;
-                _total_task_count--;
-                continue;
-            }
+    std::lock_guard<std::mutex> lock(*task_mutex_);
+    bool upload_ok = false, source_check_ok = false;
+    std::int64_t upload_time = 0, source_check_time = 0;
+    for (const auto &kv : jobstatus_task_map_) {
+        if (kv.first->name == "upload" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+            upload_ok = true;
+            upload_time = kv.second->finish_time;
+        }
+        if (kv.first->name == "source_check" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+            source_check_ok = true;
+            source_check_time = kv.second->finish_time;
         }
     }
-    bool all_req_tasks_present = _total_task_count == 0;
-    if (!all_req_tasks_present || (upload_timestamp == 0 && source_check_timestamp == 0)) {
-        return false;
-    } else if (all_req_tasks_present && upload_timestamp != 0 && source_check_timestamp == 0) {
-        return true;
-    } else if (all_req_tasks_present) {
-        return source_check_timestamp <= upload_timestamp;
-    }
-    return false;
+    return upload_ok && source_check_ok && (source_check_time <= upload_time);
 }
 
 bool PackageConf::can_check_builds() {
-    // In this case, the source check should be first
-    if (can_check_source_upload()) return false;
-    int _total_task_count = total_task_count();
-    if (_total_task_count == 0) return false;
-
-    std::int64_t upload_timestamp = 0;
-    std::int64_t binary_check_timestamp = 0;
-    std::set<std::string> valid_successful_statuses = {"pull", "tarball", "source_build", "upload", "source_check"};
-    {
-        std::lock_guard<std::mutex> lock(*task_mutex_);
-        for (auto &kv : jobstatus_task_map_) {
-            auto &jobstatus = kv.first;
-            auto &task_ptr = kv.second;
-
-            if (valid_successful_statuses.contains(jobstatus->name)) _total_task_count--;
-
-            if (jobstatus->name == "upload" && task_ptr && task_ptr->successful) {
-                upload_timestamp = task_ptr->finish_time;
-                continue;
-            }
-
-            if (jobstatus->name == "build_check" && task_ptr) {
-                binary_check_timestamp = task_ptr->finish_time;
-                _total_task_count--;
-                continue;
-            }
+    std::lock_guard<std::mutex> lock(*task_mutex_);
+    bool upload_ok = false, build_check_ok = false;
+    std::int64_t upload_time = 0, build_check_time = 0;
+    for (const auto &kv : jobstatus_task_map_) {
+        if (kv.first->name == "upload" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+            upload_ok = true;
+            upload_time = kv.second->finish_time;
+        }
+        if (kv.first->name == "build_check" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+            build_check_ok = true;
+            build_check_time = kv.second->finish_time;
         }
     }
-    bool all_req_tasks_present = _total_task_count == 0;
-    if (!all_req_tasks_present || (upload_timestamp == 0 && binary_check_timestamp == 0)) {
-        return false;
-    } else if (all_req_tasks_present && upload_timestamp != 0 && binary_check_timestamp == 0) {
-        return true;
-    } else if (all_req_tasks_present) {
-        return binary_check_timestamp <= upload_timestamp;
-    }
-    return false;
+    return upload_ok && build_check_ok && (build_check_time <= upload_time);
 }
 // End of PackageConf
 // Start of GitCommit
