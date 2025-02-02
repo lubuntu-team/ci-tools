@@ -669,9 +669,8 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                     r->assign_task(job_statuses->at("pull"), existing_item->first_pull_task, r);
                     r->assign_task(job_statuses->at("tarball"), existing_item->first_tarball_task, r);
 
-                    // Point packaging_commit/upstream_commit to the real pkgconf's pointers
-                    r->packaging_commit = existing_item->first_pkgconf->packaging_commit;
-                    r->upstream_commit  = existing_item->first_pkgconf->upstream_commit;
+                    *(r->packaging_commit) = *(existing_item->first_pkgconf->packaging_commit);
+                    *(r->upstream_commit) = *(existing_item->first_pkgconf->upstream_commit);
                     r->sync();
                     continue;
                 }
