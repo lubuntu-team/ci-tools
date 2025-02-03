@@ -321,13 +321,9 @@ bool CiLogic::pull_project(std::shared_ptr<PackageConf> &proj, std::shared_ptr<L
 
     // Now read the HEAD commits and store them
     log->append("Fetching complete. Storing Git commit data...\n");
-    if (!proj->packaging_commit) {
-        proj->packaging_commit = std::make_unique<GitCommit>();
-    }
+    if (!proj->packaging_commit) proj->packaging_commit = std::make_shared<GitCommit>();
+    if (!proj->upstream_commit) proj->upstream_commit = std::make_shared<GitCommit>();
 
-    if (!proj->upstream_commit) {
-        proj->upstream_commit = std::make_unique<GitCommit>();
-    }
     *proj->packaging_commit = get_commit_from_pkg_repo(packaging_dir.string(), log);
     *proj->upstream_commit = get_commit_from_pkg_repo(upstream_dir.string(), log);
     proj->sync();
@@ -671,6 +667,14 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
 
                     *(r->packaging_commit) = *(existing_item->first_pkgconf->packaging_commit);
                     *(r->upstream_commit) = *(existing_item->first_pkgconf->upstream_commit);
+                    if (existing_item->first_pkgconf->packaging_commit) {
+                        if (!r->packaging_commit) r->packaging_commit = std::make_shared<GitCommit>(*(existing_item->first_pkgconf->packaging_commit));
+                        else *(r->packaging_commit) = *(existing_item->first_pkgconf->packaging_commit);
+                    }
+                    if (existing_item->first_pkgconf->upstream_commit) {
+                        if (!r->upstream_commit) r->upstream_commit = std::make_shared<GitCommit>(*(existing_item->first_pkgconf->upstream_commit));
+                        else *(r->upstream_commit) = *(existing_item->first_pkgconf->upstream_commit);
+                    }
                     r->sync();
                     continue;
                 }
