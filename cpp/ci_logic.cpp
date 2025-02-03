@@ -665,8 +665,6 @@ std::string CiLogic::queue_pull_tarball(std::vector<std::shared_ptr<PackageConf>
                     r->assign_task(job_statuses->at("pull"), existing_item->first_pull_task, r);
                     r->assign_task(job_statuses->at("tarball"), existing_item->first_tarball_task, r);
 
-                    *(r->packaging_commit) = *(existing_item->first_pkgconf->packaging_commit);
-                    *(r->upstream_commit) = *(existing_item->first_pkgconf->upstream_commit);
                     if (existing_item->first_pkgconf->packaging_commit) {
                         if (!r->packaging_commit) r->packaging_commit = std::make_shared<GitCommit>(*(existing_item->first_pkgconf->packaging_commit));
                         else *(r->packaging_commit) = *(existing_item->first_pkgconf->packaging_commit);
