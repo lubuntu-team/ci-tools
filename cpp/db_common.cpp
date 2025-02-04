@@ -85,6 +85,7 @@ QSqlDatabase get_thread_connection() {
         }
         return thread_db;
     }
+    return QSqlDatabase();
 }
 
 bool ci_query_exec(QSqlQuery* query, const QString query_string) {
