@@ -391,10 +391,11 @@ std::tuple<bool, std::set<std::string>> CiLogic::build_project(std::shared_ptr<P
         update_changelog(packaging_dir, proj->release->codename, proj->upstream_version, std::to_string(proj->ppa_revision), log);
         log->append("Changelog updated, copying the packaging...");
 
-        // Now copy entire packaging into a subfolder
+        // Now copy only the "debian" directory from packaging into a subfolder
         fs::path dest_dir = working_dir / (proj->package->name + "-" + proj->upstream_version);
-        copy_directory(packaging_dir, dest_dir);
-        log->append("Copied packaging to " + dest_dir.string() + ", copying tarball...");
+        fs::create_directories(dest_dir);
+        copy_directory(packaging_dir / "debian", dest_dir / "debian");
+        log->append(std::format("Copied {}/debian => {}/debian", packaging_dir.string(), dest_dir.string()));
 
         // Reset changelog after dch (so local changes aren't committed)
         reset_changelog(packaging_dir.parent_path() / proj->package->name, changelog);
