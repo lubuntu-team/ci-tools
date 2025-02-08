@@ -32,7 +32,7 @@ static std::atomic<unsigned int> thread_id_counter{1};
 static QString shared_database_path;
 
 static int get_delay(int attempt) {
-    return 10 * static_cast<int>(std::pow(1.5, attempt - 1));
+    return 10 * static_cast<int>(std::pow(1.4, attempt - 1));
 }
 
 QSqlDatabase get_thread_connection() {
