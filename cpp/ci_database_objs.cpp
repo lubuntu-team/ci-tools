@@ -894,6 +894,7 @@ bool PackageConf::can_check_source_upload() {
                 source_check_successful = kv.second->successful;
                 source_check_time = kv.second->finish_time;
             }
+            if (upload_ok && source_check_ok) break;
         }
     }
     std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -919,6 +920,7 @@ bool PackageConf::can_check_builds() {
                 build_check_successful = kv.second->successful;
                 build_check_time = kv.second->finish_time;
             }
+            if (source_check_ok && build_check_ok) break;
         }
     }
     std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
