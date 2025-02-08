@@ -894,7 +894,9 @@ bool PackageConf::can_check_source_upload() {
             source_check_time = kv.second->finish_time;
         }
     }
-    return upload_ok && source_check_ok && (source_check_time <= upload_time);
+    if (!source_check_ok && upload_ok) return true;
+    else if (!source_check_ok && !upload_ok) return false;
+    else return upload_ok && source_check_ok && (source_check_time <= upload_time);
 }
 
 bool PackageConf::can_check_builds() {
@@ -911,7 +913,9 @@ bool PackageConf::can_check_builds() {
             build_check_time = kv.second->finish_time;
         }
     }
-    return upload_ok && build_check_ok && (build_check_time <= upload_time);
+    if (!build_check_ok && upload_ok) return true;
+    else if (!build_check_ok && !upload_ok) return false;
+    else return upload_ok && build_check_ok && (build_check_time <= upload_time);
 }
 // End of PackageConf
 // Start of GitCommit
