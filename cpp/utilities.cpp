@@ -449,7 +449,8 @@ void create_tarball(const std::string &tarball_path,
             throw std::runtime_error(err);
         }
 
-        // For duplicate checking only for directories.
+        // Track directories already added.
+        // For directories that are not symlinks, use their canonical absolute path as a key.
         std::unordered_set<std::string> added_directories;
 
         for (auto it = fs::recursive_directory_iterator(directory, fs::directory_options::skip_permission_denied);
@@ -458,13 +459,14 @@ void create_tarball(const std::string &tarball_path,
             std::error_code ec;
             fs::path rel_path = fs::relative(path, directory, ec);
             if (ec) {
-                if (log) log->append("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
+                if (log)
+                    log->append("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
                 continue;
             }
             fs::path norm_rel = rel_path.lexically_normal();
             std::string rel_str = norm_rel.string();
 
-            // Check exclusions regardless of type.
+            // Apply exclusions (if any substring appears in the relative path, skip it)
             bool is_excluded = std::any_of(exclusions.begin(), exclusions.end(),
                                            [&rel_str](const std::string &excl) {
                                                return rel_str.find(excl) != std::string::npos;
@@ -472,18 +474,26 @@ void create_tarball(const std::string &tarball_path,
             if (is_excluded)
                 continue;
 
-            // For directories, check if we've already added this path.
             fs::file_status fstatus = it->symlink_status(ec);
             if (ec) {
-                if (log) log->append("Failed to get file status for: " + path.string() + " Error: " + ec.message());
+                if (log)
+                    log->append("Failed to get file status for: " + path.string() + " Error: " + ec.message());
                 continue;
             }
-            if (fs::is_directory(fstatus)) {
-                if (added_directories.find(rel_str) != added_directories.end())
-                    continue;  // Skip duplicate directory entry.
-                added_directories.insert(rel_str);
+
+            // For directories (that are not symlinks), compute a canonical key.
+            if (fs::is_directory(fstatus) && !fs::is_symlink(fstatus)) {
+                fs::path canon = fs::canonical(path, ec);
+                if (ec) {
+                    // If canonical fails, fall back to the relative path.
+                    canon = rel_path;
+                }
+                std::string canon_str = canon.string();
+                if (added_directories.find(canon_str) != added_directories.end())
+                    continue;
+                added_directories.insert(canon_str);
             }
-            // (For regular files or symlinks, always add them.)
+            // For files and symlinks, we always add them.
 
             struct archive_entry *entry = archive_entry_new();
             if (!entry) {
@@ -491,8 +501,7 @@ void create_tarball(const std::string &tarball_path,
                     log->append("Failed to create archive entry for: " + path.string());
                 continue;
             }
-
-            // For directories, ensure the entry name ends with '/'
+            // For directories, ensure the entry pathname ends with '/'
             std::string entry_path = rel_str;
             if (fs::is_directory(fstatus)) {
                 if (!entry_path.empty() && entry_path.back() != '/')
