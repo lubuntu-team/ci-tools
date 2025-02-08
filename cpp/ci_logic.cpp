@@ -347,7 +347,7 @@ bool CiLogic::create_project_tarball(std::shared_ptr<PackageConf> &proj, std::sh
     try {
         excludes = extract_files_excluded(copyright.string());
     } catch(...) {}
-    excludes.emplace_back(".git/");
+    excludes.emplace_back(".git");
     log->append("Creating " + main_tarball.string() + " with the following exclusions:\n");
     for (auto exclude : excludes) { log->append(" - " + exclude + "\n"); }
 
