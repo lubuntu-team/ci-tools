@@ -449,10 +449,38 @@ void create_tarball(const std::string &tarball_path,
             throw std::runtime_error(err);
         }
 
-        // Track directories already added.
-        // For directories that are not symlinks, use their canonical absolute path as a key.
+        // Get the name of the directory we want to include as the top-level folder.
+        fs::path base_dir = fs::path(directory).filename();
+        std::string base_dir_str = base_dir.string();
+
+        // First add an entry for the top-level directory (with a trailing slash)
+        {
+            struct archive_entry *entry = archive_entry_new();
+            if (!entry) {
+                throw std::runtime_error("Failed to create archive entry for top-level directory.");
+            }
+            std::string top_dir = base_dir_str + "/";
+            archive_entry_set_pathname(entry, top_dir.c_str());
+            archive_entry_set_size(entry, 0);
+            archive_entry_set_filetype(entry, AE_IFDIR);
+            // Set default permissions and modification time
+            archive_entry_set_perm(entry, 0755);
+            std::time_t now_time = std::time(nullptr);
+            archive_entry_set_mtime(entry, now_time, 0);
+            if (archive_write_header(a.get(), entry) != ARCHIVE_OK) {
+                std::string err = "Failed to write header for top-level directory: ";
+                err += archive_error_string(a.get());
+                archive_entry_free(entry);
+                throw std::runtime_error(err);
+            }
+            archive_write_finish_entry(a.get());
+            archive_entry_free(entry);
+        }
+
+        // Use a set to keep track of directories already added.
         std::unordered_set<std::string> added_directories;
 
+        // Now iterate recursively through the source directory.
         for (auto it = fs::recursive_directory_iterator(directory, fs::directory_options::skip_permission_denied);
              it != fs::recursive_directory_iterator(); ++it) {
             const auto &path = it->path();
@@ -460,16 +488,19 @@ void create_tarball(const std::string &tarball_path,
             fs::path rel_path = fs::relative(path, directory, ec);
             if (ec) {
                 if (log)
-                    log->append("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
+                    log->append("Failed to compute relative path for: " + path.string() +
+                                " Error: " + ec.message());
                 continue;
             }
-            fs::path norm_rel = rel_path.lexically_normal();
-            std::string rel_str = norm_rel.string();
 
-            // Apply exclusions (if any substring appears in the relative path, skip it)
+            // Prepend the base directory name so that the entry becomes "base_dir/..."
+            fs::path entry_path = fs::path(base_dir_str) / rel_path;
+            std::string entry_path_str = entry_path.string();
+
+            // Skip any paths that match one of the exclusions
             bool is_excluded = std::any_of(exclusions.begin(), exclusions.end(),
-                                           [&rel_str](const std::string &excl) {
-                                               return rel_str.find(excl) != std::string::npos;
+                                           [&entry_path_str](const std::string &excl) {
+                                               return entry_path_str.find(excl) != std::string::npos;
                                            });
             if (is_excluded)
                 continue;
@@ -477,17 +508,16 @@ void create_tarball(const std::string &tarball_path,
             fs::file_status fstatus = it->symlink_status(ec);
             if (ec) {
                 if (log)
-                    log->append("Failed to get file status for: " + path.string() + " Error: " + ec.message());
+                    log->append("Failed to get file status for: " + path.string() +
+                                " Error: " + ec.message());
                 continue;
             }
 
-            // For directories (that are not symlinks), compute a canonical key.
+            // For non-symlink directories, check if we already added it (using canonical path)
             if (fs::is_directory(fstatus) && !fs::is_symlink(fstatus)) {
                 fs::path canon = fs::canonical(path, ec);
-                if (ec) {
-                    // If canonical fails, fall back to the relative path.
+                if (ec)
                     canon = rel_path;
-                }
                 std::string canon_str = canon.string();
                 if (added_directories.find(canon_str) != added_directories.end())
                     continue;
@@ -495,24 +525,27 @@ void create_tarball(const std::string &tarball_path,
             }
             // For files and symlinks, we always add them.
 
+            // Create a new archive entry for this file/directory/symlink.
             struct archive_entry *entry = archive_entry_new();
             if (!entry) {
                 if (log)
                     log->append("Failed to create archive entry for: " + path.string());
                 continue;
             }
-            // For directories, ensure the entry pathname ends with '/'
-            std::string entry_path = rel_str;
+
+            // Make sure directories end with a '/'
             if (fs::is_directory(fstatus)) {
-                if (!entry_path.empty() && entry_path.back() != '/')
-                    entry_path.push_back('/');
+                if (!entry_path_str.empty() && entry_path_str.back() != '/')
+                    entry_path_str.push_back('/');
             }
-            archive_entry_set_pathname(entry, entry_path.c_str());
+            archive_entry_set_pathname(entry, entry_path_str.c_str());
 
             if (fs::is_regular_file(fstatus)) {
                 uintmax_t filesize = fs::file_size(path, ec);
                 if (ec) {
-                    if (log) log->append("Cannot get file size for: " + path.string() + " Error: " + ec.message());
+                    if (log)
+                        log->append("Cannot get file size for: " + path.string() +
+                                    " Error: " + ec.message());
                     archive_entry_free(entry);
                     continue;
                 }
@@ -526,7 +559,9 @@ void create_tarball(const std::string &tarball_path,
             } else if (fs::is_symlink(fstatus)) {
                 fs::path target = fs::read_symlink(path, ec);
                 if (ec) {
-                    if (log) log->append("Cannot read symlink for: " + path.string() + " Error: " + ec.message());
+                    if (log)
+                        log->append("Cannot read symlink for: " + path.string() +
+                                    " Error: " + ec.message());
                     archive_entry_free(entry);
                     continue;
                 }
@@ -534,33 +569,42 @@ void create_tarball(const std::string &tarball_path,
                 archive_entry_set_filetype(entry, AE_IFLNK);
                 archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
             } else {
-                if (log) log->append("Unsupported file type for: " + path.string());
+                if (log)
+                    log->append("Unsupported file type for: " + path.string());
                 archive_entry_free(entry);
                 continue;
             }
 
+            // Set the modification time
             fs::file_time_type ftime = fs::last_write_time(path, ec);
             std::time_t mtime;
             if (ec) {
-                if (log) log->append("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
-                auto now = std::chrono::system_clock::now();
-                mtime = std::chrono::system_clock::to_time_t(now);
-                if (log) log->append("Setting current UTC time as modification time for: " + path.string());
+                if (log)
+                    log->append("Failed to get last write time for: " + path.string() +
+                                " Error: " + ec.message());
+                mtime = std::time(nullptr);
+                if (log)
+                    log->append("Setting current UTC time as modification time for: " + path.string());
             } else {
                 mtime = to_time_t(ftime);
             }
             archive_entry_set_mtime(entry, mtime, 0);
 
+            // Write the header. If it fails, log and free the entry.
             if (archive_write_header(a.get(), entry) != ARCHIVE_OK) {
-                if (log) log->append("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a.get()));
+                if (log)
+                    log->append("Failed to write header for: " + path.string() +
+                                " Error: " + archive_error_string(a.get()));
                 archive_entry_free(entry);
                 continue;
             }
 
+            // If it is a regular file, stream its contents.
             if (fs::is_regular_file(fstatus)) {
                 std::ifstream in_file(path, std::ios::binary);
                 if (!in_file) {
-                    if (log) log->append("Failed to open file for reading: " + path.string());
+                    if (log)
+                        log->append("Failed to open file for reading: " + path.string());
                     archive_entry_free(entry);
                     continue;
                 }
@@ -571,17 +615,23 @@ void create_tarball(const std::string &tarball_path,
                     std::streamsize bytes_read = in_file.gcount();
                     if (bytes_read > 0) {
                         if (archive_write_data(a.get(), buffer, static_cast<size_t>(bytes_read)) < 0) {
-                            if (log) log->append("Failed to write data for: " + path.string() + " Error: " + archive_error_string(a.get()));
+                            if (log)
+                                log->append("Failed to write data for: " + path.string() +
+                                            " Error: " + archive_error_string(a.get()));
                             break;
                         }
                     }
                 }
-                if (in_file.bad() && log) log->append("Error reading file: " + path.string());
+                if (in_file.bad() && log)
+                    log->append("Error reading file: " + path.string());
             }
 
             if (archive_write_finish_entry(a.get()) != ARCHIVE_OK) {
-                if (log) log->append("Failed to finish entry for: " + path.string() + " Error: " + archive_error_string(a.get()));
+                if (log)
+                    log->append("Failed to finish entry for: " + path.string() +
+                                " Error: " + archive_error_string(a.get()));
             }
+            archive_entry_free(entry);
         }
 
         if (archive_write_close(a.get()) != ARCHIVE_OK) {
