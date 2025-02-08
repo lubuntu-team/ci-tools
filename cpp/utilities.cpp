@@ -416,187 +416,196 @@ std::vector<std::string> extract_files_excluded(const std::string& filepath) {
 }
 
 // Function to create a tarball
-void create_tarball(const std::string& tarballPath, const std::string& directory, const std::vector<std::string>& exclusions, std::shared_ptr<Log> log) {
-    log->append("Creating tarball: " + tarballPath);
+void create_tarball(const std::string &tarball_path,
+                    const std::string &directory,
+                    const std::vector<std::string> &exclusions,
+                    std::shared_ptr<Log> log) {
+    if (log)
+        log->append("Creating tarball: " + tarball_path);
 
     try {
-        struct archive* a = archive_write_new();
-        if (!a) throw std::runtime_error("Failed to create a new archive.");
+        // Ensure the source directory exists and is a directory.
+        if (!fs::exists(directory) || !fs::is_directory(directory)) throw std::runtime_error("Source directory does not exist or is not a directory: " + directory);
 
-        if (archive_write_add_filter_gzip(a) != ARCHIVE_OK) {
+        // Use RAII for the archive writer.
+        struct ArchiveDeleter {
+            void operator()(struct archive *a) const {
+                if (a) archive_write_free(a);
+            }
+        };
+        std::unique_ptr<struct archive, ArchiveDeleter> a(archive_write_new());
+        if (!a) throw std::runtime_error("Failed to create a new archive writer.");
+
+        if (archive_write_add_filter_gzip(a.get()) != ARCHIVE_OK) {
             std::string err = "Failed to add gzip filter: ";
-            err += archive_error_string(a);
-            archive_write_free(a);
+            err += archive_error_string(a.get());
             throw std::runtime_error(err);
         }
 
-        if (archive_write_set_format_pax_restricted(a) != ARCHIVE_OK) {
-            std::string err = "Failed to set format: ";
-            err += archive_error_string(a);
-            archive_write_free(a);
+        if (archive_write_set_format_pax_restricted(a.get()) != ARCHIVE_OK) {
+            std::string err = "Failed to set archive format: ";
+            err += archive_error_string(a.get());
             throw std::runtime_error(err);
         }
 
-        if (archive_write_open_filename(a, tarballPath.c_str()) != ARCHIVE_OK) {
+        if (archive_write_open_filename(a.get(), tarball_path.c_str()) != ARCHIVE_OK) {
             std::string err = "Could not open tarball for writing: ";
-            err += archive_error_string(a);
-            archive_write_free(a);
+            err += archive_error_string(a.get());
             throw std::runtime_error(err);
         }
 
-        // Iterate through the directory recursively without following symlinks
-        for (auto it = fs::recursive_directory_iterator(
-                 directory,
-                 fs::directory_options::skip_permission_denied);
+        // Iterate over the directory recursively.
+        for (auto it = fs::recursive_directory_iterator(directory, fs::directory_options::skip_permission_denied);
              it != fs::recursive_directory_iterator(); ++it) {
-            const auto& path = it->path();
-            try {
-                std::error_code ec;
+            const auto &path = it->path();
 
-                fs::path relative_path = fs::relative(path, directory, ec);
-                if (ec) {
+            // Compute a relative path to the source directory.
+            std::error_code ec;
+            fs::path rel_path = fs::relative(path, directory, ec);
+            if (ec) {
+                if (log)
                     log->append("Failed to compute relative path for: " + path.string() + " Error: " + ec.message());
-                    continue;
-                }
+                continue;
+            }
+            fs::path norm_rel_path = rel_path.lexically_normal();
+            std::string rel_path_str = norm_rel_path.string();
 
-                // Normalize the relative path to avoid discrepancies
-                fs::path normalized_relative_path = relative_path.lexically_normal();
-                std::string relative_path_str = normalized_relative_path.string();
+            // Exclude files whose relative path contains any exclusion substring.
+            bool is_excluded = std::any_of(exclusions.begin(), exclusions.end(),
+                                           [&rel_path_str](const std::string &excl) {
+                                               return rel_path_str.find(excl) != std::string::npos;
+                                           });
+            if (is_excluded) continue;
 
-                // Exclusion logic (if any exclusions are provided)
-                bool excluded = std::any_of(exclusions.begin(), exclusions.end(), [&relative_path_str](const std::string& exclusion) {
-                    return relative_path_str.find(exclusion) != std::string::npos;
-                });
-                if (excluded) { continue; }
-
-                fs::file_status fstatus = it->symlink_status(ec);
-                if (ec) {
+            // Get file status without following symlinks.
+            fs::file_status fstatus = it->symlink_status(ec);
+            if (ec) {
+                if (log)
                     log->append("Failed to get file status for: " + path.string() + " Error: " + ec.message());
-                    continue;
-                }
+                continue;
+            }
 
-                struct archive_entry* entry = archive_entry_new();
-                if (!entry) {
+            // Create a new archive entry.
+            struct archive_entry *entry = archive_entry_new();
+            if (!entry) {
+                if (log)
                     log->append("Failed to create archive entry for: " + path.string());
-                    archive_write_free(a);
-                    throw std::runtime_error("Failed to create archive entry.");
-                }
+                continue;
+            }
 
-                std::string entry_path = relative_path_str;
-                if (fs::is_directory(fstatus)) {
-                    // Ensure the directory pathname ends with '/'
-                    if (!entry_path.empty() && entry_path.back() != '/') {
-                        entry_path += '/';
-                    }
-                    archive_entry_set_pathname(entry, entry_path.c_str());
-                } else {
-                    archive_entry_set_pathname(entry, entry_path.c_str());
-                }
+            // For directories, ensure the entry path ends with a '/'
+            std::string entry_path = rel_path_str;
+            if (fs::is_directory(fstatus)) {
+                if (!entry_path.empty() && entry_path.back() != '/')
+                    entry_path.push_back('/');
+            }
+            archive_entry_set_pathname(entry, entry_path.c_str());
 
-                // Set file type, permissions, and size
-                if (fs::is_regular_file(fstatus)) {
-                    // Regular file
-                    uintmax_t filesize = fs::file_size(path, ec);
-                    if (ec) {
-                        log->append("Cannot get file size for: " + path.string() + " Error: " + ec.message());
-                        archive_entry_free(entry);
-                        continue;
-                    }
-                    archive_entry_set_size(entry, static_cast<off_t>(filesize));
-                    archive_entry_set_filetype(entry, AE_IFREG);
-                    archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
-                }
-                else if (fs::is_symlink(fstatus)) {
-                    fs::path target = fs::read_symlink(path, ec);
-                    if (ec) {
-                        log->append("Cannot read symlink for: " + path.string() + " Error: " + ec.message());
-                        archive_entry_free(entry);
-                        continue;
-                    }
-                    archive_entry_set_symlink(entry, target.c_str());
-                    archive_entry_set_filetype(entry, AE_IFLNK);
-                    archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
-                }
-                else if (fs::is_directory(fstatus)) {
-                    archive_entry_set_size(entry, 0);
-                    archive_entry_set_filetype(entry, AE_IFDIR);
-                    archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
-                }
-                else {
-                    log->append("Unsupported file type for: " + path.string());
-                    archive_entry_free(entry);
-                    continue;
-                }
-
-                // Retrieve and set the modification time
-                fs::file_time_type ftime = fs::last_write_time(path, ec);
-                std::time_t mtime;
+            // Set file type, size, and permissions.
+            if (fs::is_regular_file(fstatus)) {
+                uintmax_t filesize = fs::file_size(path, ec);
                 if (ec) {
-                    log->append("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
-                    // Obtain current UTC time as fallback
-                    auto now = std::chrono::system_clock::now();
-                    mtime = std::chrono::system_clock::to_time_t(now);
-                    log->append("Setting default mtime (current UTC time) for: " + path.string());
-                } else {
-                    mtime = to_time_t(ftime);
-                }
-                archive_entry_set_mtime(entry, mtime, 0);
-
-                if (archive_write_header(a, entry) != ARCHIVE_OK) {
-                    log->append("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a));
+                    if (log)
+                        log->append("Cannot get file size for: " + path.string() + " Error: " + ec.message());
                     archive_entry_free(entry);
                     continue;
                 }
+                archive_entry_set_size(entry, static_cast<off_t>(filesize));
+                archive_entry_set_filetype(entry, AE_IFREG);
+                archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
+            } else if (fs::is_directory(fstatus)) {
+                archive_entry_set_size(entry, 0);
+                archive_entry_set_filetype(entry, AE_IFDIR);
+                archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
+            } else if (fs::is_symlink(fstatus)) {
+                fs::path target = fs::read_symlink(path, ec);
+                if (ec) {
+                    if (log)
+                        log->append("Cannot read symlink for: " + path.string() + " Error: " + ec.message());
+                    archive_entry_free(entry);
+                    continue;
+                }
+                archive_entry_set_symlink(entry, target.c_str());
+                archive_entry_set_filetype(entry, AE_IFLNK);
+                archive_entry_set_perm(entry, static_cast<mode_t>(fstatus.permissions()));
+            } else {
+                if (log)
+                    log->append("Unsupported file type for: " + path.string());
+                archive_entry_free(entry);
+                continue;
+            }
 
-                if (fs::is_regular_file(fstatus)) {
-                    std::ifstream fileStream(path, std::ios::binary);
-                    if (!fileStream) {
+            // Set the modification time.
+            fs::file_time_type ftime = fs::last_write_time(path, ec);
+            std::time_t mtime;
+            if (ec) {
+                if (log)
+                    log->append("Failed to get last write time for: " + path.string() + " Error: " + ec.message());
+                auto now = std::chrono::system_clock::now();
+                mtime = std::chrono::system_clock::to_time_t(now);
+                if (log)
+                    log->append("Setting current UTC time as modification time for: " + path.string());
+            } else {
+                mtime = to_time_t(ftime);
+            }
+            archive_entry_set_mtime(entry, mtime, 0);
+
+            // Write the header for the entry.
+            if (archive_write_header(a.get(), entry) != ARCHIVE_OK) {
+                if (log)
+                    log->append("Failed to write header for: " + path.string() + " Error: " + archive_error_string(a.get()));
+                archive_entry_free(entry);
+                continue;
+            }
+
+            // If this is a regular file, write its contents.
+            if (fs::is_regular_file(fstatus)) {
+                std::ifstream in_file(path, std::ios::binary);
+                if (!in_file) {
+                    if (log)
                         log->append("Failed to open file for reading: " + path.string());
-                        archive_entry_free(entry);
-                        continue;
-                    }
-
-                    const std::size_t bufferSize = 8192;
-                    char buffer[bufferSize];
-                    while (fileStream) {
-                        fileStream.read(buffer, bufferSize);
-                        std::streamsize bytesRead = fileStream.gcount();
-                        if (bytesRead > 0) {
-                            if (archive_write_data(a, buffer, static_cast<size_t>(bytesRead)) < 0) {
-                                log->append("Failed to write data for: " + path.string() + " Error: " + archive_error_string(a));
-                                break;
-                            }
+                    archive_entry_free(entry);
+                    continue;
+                }
+                const std::size_t buffer_size = 8192;
+                char buffer[buffer_size];
+                while (in_file) {
+                    in_file.read(buffer, buffer_size);
+                    std::streamsize bytes_read = in_file.gcount();
+                    if (bytes_read > 0) {
+                        if (archive_write_data(a.get(), buffer, static_cast<size_t>(bytes_read)) < 0) {
+                            if (log)
+                                log->append("Failed to write data for: " + path.string() + " Error: " + archive_error_string(a.get()));
+                            break;
                         }
                     }
-
-                    if (fileStream.bad()) {
-                        log->append("Error reading file: " + path.string());
-                    }
                 }
-
-                archive_entry_free(entry);
-            } catch (const std::exception &e) {
-                log->append("Failed to add the following file to the tarball: " + path.string());
-                log->append(e.what());
+                if (in_file.bad() && log)
+                    log->append("Error reading file: " + path.string());
             }
+
+            // Finish writing the entry.
+            if (archive_write_finish_entry(a.get()) != ARCHIVE_OK) {
+                if (log)
+                    log->append("Failed to finish entry for: " + path.string() + " Error: " + archive_error_string(a.get()));
+            }
+            // No need to call archive_entry_free() as finish_entry() frees the entry.
         }
 
-        if (archive_write_close(a) != ARCHIVE_OK) {
+        if (archive_write_close(a.get()) != ARCHIVE_OK) {
             std::string err = "Failed to close archive: ";
-            err += archive_error_string(a);
-            archive_write_free(a);
+            err += archive_error_string(a.get());
             throw std::runtime_error(err);
         }
-
-        if (archive_write_free(a) != ARCHIVE_OK) {
-            std::string err = "Failed to free archive: ";
-            err += archive_error_string(a);
-            throw std::runtime_error(err);
-        }
+        // The unique_ptr will call archive_write_free() automatically.
     } catch (const std::exception &e) {
-        log->append("Failed to create tarball: " + tarballPath);
-        log->append(e.what());
+        if (log) {
+            log->append("Failed to create tarball: " + tarball_path);
+            log->append(e.what());
+        }
+        return;
     }
 
-    log->append("Tarball created and compressed: " + tarballPath);
+    if (log)
+        log->append("Tarball created and compressed: " + tarball_path);
 }
