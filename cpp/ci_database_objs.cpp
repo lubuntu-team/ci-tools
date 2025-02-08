@@ -882,40 +882,46 @@ void PackageConf::sync() {
 
 bool PackageConf::can_check_source_upload() {
     std::lock_guard<std::mutex> lock(*task_mutex_);
-    bool upload_ok = false, source_check_ok = false;
+    bool upload_ok = false, source_check_ok = false, source_check_successful = false;
     std::int64_t upload_time = 0, source_check_time = 0;
+    std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()).count();
     for (const auto &kv : jobstatus_task_map_) {
         if (kv.first->name == "upload" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
             upload_ok = true;
             upload_time = kv.second->finish_time;
-        }
-        if (kv.first->name == "source_check" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+        } else if (kv.first->name == "source_check" && kv.second && kv.second->finish_time > 0) {
             source_check_ok = true;
+            source_check_successful = kv.second->successful;
             source_check_time = kv.second->finish_time;
         }
     }
-    if (!source_check_ok && upload_ok) return true;
-    else if (!source_check_ok && !upload_ok) return false;
+    if (upload_ok && !source_check_ok) return true;
+    else if (!upload_ok && source_check_ok) return false;
+    else if (upload_ok && source_check_ok && !source_check_successful && (source_check_time >= (now - (60 * 60 * 1000)))) return true;
     else return upload_ok && source_check_ok && (source_check_time <= upload_time);
 }
 
 bool PackageConf::can_check_builds() {
     std::lock_guard<std::mutex> lock(*task_mutex_);
-    bool upload_ok = false, build_check_ok = false;
-    std::int64_t upload_time = 0, build_check_time = 0;
+    bool source_check_ok = false, build_check_ok = false, build_check_successful;
+    std::int64_t source_check_time = 0, build_check_time = 0;
+    std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()).count();
     for (const auto &kv : jobstatus_task_map_) {
-        if (kv.first->name == "upload" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
-            upload_ok = true;
-            upload_time = kv.second->finish_time;
-        }
-        if (kv.first->name == "build_check" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+        if (kv.first->name == "source_check" && kv.second && kv.second->finish_time > 0 && kv.second->successful) {
+            source_check_ok = true;
+            source_check_time = kv.second->finish_time;
+        } else if (kv.first->name == "build_check" && kv.second && kv.second->finish_time > 0) {
             build_check_ok = true;
+            build_check_successful = kv.second->successful;
             build_check_time = kv.second->finish_time;
         }
     }
-    if (!build_check_ok && upload_ok) return true;
-    else if (!build_check_ok && !upload_ok) return false;
-    else return upload_ok && build_check_ok && (build_check_time <= upload_time);
+    if (!build_check_ok && source_check_ok) return true;
+    else if (!build_check_ok && !source_check_ok) return false;
+    else if (source_check_ok && build_check_ok && !build_check_successful && (build_check_time >= (now - (4 * 24 * 60 * 60 * 1000)))) return true;
+    else return source_check_ok && build_check_ok && (build_check_time <= source_check_time);
 }
 // End of PackageConf
 // Start of GitCommit
