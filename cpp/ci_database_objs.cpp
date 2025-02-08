@@ -926,6 +926,7 @@ bool PackageConf::can_check_builds() {
 
     if (!build_check_ok && source_check_ok) return true;
     else if (!build_check_ok && !source_check_ok) return false;
+    else if (source_check_ok && build_check_ok && !build_check_successful && (build_check_time >= (now - (60 * 60 * 1000)))) return false;
     else if (source_check_ok && build_check_ok && !build_check_successful && (build_check_time >= (now - (4 * 24 * 60 * 60 * 1000)))) return true;
     else return source_check_ok && build_check_ok && (build_check_time <= source_check_time);
 }
