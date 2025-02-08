@@ -16,6 +16,7 @@
 #include "db_common.h"
 
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <mutex>
 #include <thread>
