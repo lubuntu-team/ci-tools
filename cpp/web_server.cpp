@@ -874,12 +874,7 @@ bool WebServer::start_server(quint16 port) {
         int page = query.queryItemValue("page").isEmpty() ? 1 : query.queryItemValue("page").toInt();
         int per_page = query.queryItemValue("per_page").isEmpty() ? 30 : query.queryItemValue("per_page").toInt();
 
-        // Return concurrency
         return QtConcurrent::run([=, this]() {
-            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-
             if (!(type.empty() || type == "queued" || type == "complete")) {
                 std::string msg = "Invalid type specified.";
                 return QHttpServerResponse("text/html", QByteArray(msg.c_str(), (int)msg.size()));
@@ -889,7 +884,6 @@ bool WebServer::start_server(quint16 port) {
             std::string title_prefix;
 
             if (type.empty()) {
-                // default to 'running'
                 title_prefix = "Running";
                 final_tasks = task_queue->get_running_tasks();
             } else if (type == "queued") {
@@ -897,57 +891,49 @@ bool WebServer::start_server(quint16 port) {
                 final_tasks = task_queue->get_tasks();
             } else if (type == "complete") {
                 title_prefix = "Completed";
-                // gather tasks that have start_time > 0 and finish_time > 0
                 std::vector<std::shared_ptr<Task>> tasks_vector;
-                auto pkgconfs = cilogic->get_packageconfs();
-                for (auto &pkgconf : pkgconfs) {
+                for (auto &pkgconf : cilogic->get_packageconfs()) {
                     for (auto &j : *job_statuses) {
-                        if (!j.second) {
-                            continue;
-                        }
+                        if (!j.second) continue;
                         auto t = pkgconf->get_task_by_jobstatus(j.second);
-                        if (t && t->start_time > 0 && t->finish_time > 0) {
-                            tasks_vector.push_back(t);
-                        }
+                        if (t && t->start_time > 0 && t->finish_time > 0) tasks_vector.push_back(t);
                     }
                 }
-                std::set<std::shared_ptr<Task>, Task::TaskComparator> tasks(
-                    tasks_vector.begin(),
-                    tasks_vector.end()
-                );
+                std::set<std::shared_ptr<Task>, Task::TaskComparator> tasks(tasks_vector.begin(), tasks_vector.end());
                 final_tasks = tasks;
+            }
+
+            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
+
+            {
+                auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::system_clock::now().time_since_epoch())
+                               .count();
+                std::vector<std::map<std::string, std::string>> tasks_vec;
+                for (auto task : final_tasks) {
+                    std::map<std::string, std::string> item;
+                    item["id"] = std::to_string(task->id);
+                    item["queued_timestamp"] = std::to_string(task->queue_time);
+                    item["start_timestamp"] = std::to_string(task->start_time);
+                    item["finish_timestamp"] = std::to_string(task->finish_time);
+                    item["running_timedelta"] = std::to_string(now - task->start_time);
+                    item["score"] = std::to_string(task->jobstatus->build_score);
+                    item["package_name"] = task->get_parent_packageconf()->package->name;
+                    item["package_codename"] = task->get_parent_packageconf()->release->codename;
+                    item["job_status"] = task->jobstatus->display_name;
+                    item["successful"] = task->successful ? "true" : "false";
+                    std::string replaced_log = std::regex_replace(task->log->get(), std::regex("\n"), "<br />");
+                    item["log"] = replaced_log;
+                    tasks_vec.push_back(item);
+                }
+                list_context["tasks"] = tasks_vec;
             }
 
             std::map<std::string, std::string> scalar_context = {
                 {"PAGE_TITLE", title_prefix + " Tasks"},
                 {"PAGE_TYPE", (type.empty() ? "running" : type)}
             };
-            std::map<std::string, std::vector<std::map<std::string, std::string>>> list_context;
-
-            std::vector<std::map<std::string, std::string>> tasksVec;
-            for (auto task : final_tasks) {
-                std::map<std::string, std::string> item;
-                item["id"] = std::to_string(task->id);
-                item["queued_timestamp"] = std::to_string(task->queue_time);
-                item["start_timestamp"] = std::to_string(task->start_time);
-                item["finish_timestamp"] = std::to_string(task->finish_time);
-                item["running_timedelta"] = std::to_string(now - task->start_time);
-                item["score"] = std::to_string(task->jobstatus->build_score);
-                item["package_name"] = task->get_parent_packageconf()->package->name;
-                item["package_codename"] = task->get_parent_packageconf()->release->codename;
-                item["job_status"] = task->jobstatus->display_name;
-                item["successful"] = task->successful ? "true" : "false";
-                std::string replaced_log = std::regex_replace(task->log->get(), std::regex("\n"), "<br />");
-                item["log"] = replaced_log;
-                tasksVec.push_back(item);
-            }
-            list_context["tasks"] = tasksVec;
-
-            std::string final_html = TemplateRenderer::render_with_inheritance(
-                "tasks.html",
-                scalar_context,
-                list_context
-            );
+            std::string final_html = TemplateRenderer::render_with_inheritance("tasks.html", scalar_context, list_context);
             return QHttpServerResponse("text/html", QByteArray(final_html.c_str(), (int)final_html.size()));
         });
     });
