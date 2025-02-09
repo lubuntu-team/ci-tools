@@ -32,7 +32,6 @@ class Task;
 
 // Time utilities
 std::string get_current_utc_time(const std::string& format);
-std::time_t to_time_t(const std::filesystem::file_time_type& ftime);
 
 class Log {
 private:

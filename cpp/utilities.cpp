@@ -207,16 +207,6 @@ std::string get_current_utc_time(const std::string& format) {
     return std::string(buf);
 }
 
-// Function to convert filesystem time to time_t
-std::time_t to_time_t(const fs::file_time_type& ftime) {
-    using namespace std::chrono;
-    // Convert to system_clock time_point
-    auto sctp = time_point_cast<system_clock::duration>(
-        ftime - fs::file_time_type::clock::now() + system_clock::now()
-    );
-    return system_clock::to_time_t(sctp);
-}
-
 std::vector<std::string> split_string(const std::string& input, const std::string& delimiter) {
     std::vector<std::string> result;
     size_t start = 0;
@@ -586,7 +576,7 @@ void create_tarball(const std::string &tarball_path,
                 if (log)
                     log->append("Setting current UTC time as modification time for: " + path.string());
             } else {
-                mtime = to_time_t(ftime);
+                mtime = std::chrono::system_clock::to_time_t(std::chrono::file_clock::to_sys(ftime));
             }
             archive_entry_set_mtime(entry, mtime, 0);
 
