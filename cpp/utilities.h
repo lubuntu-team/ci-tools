@@ -23,7 +23,6 @@
 #include <shared_mutex>
 #include <semaphore>
 #include <functional>
-#include <git2.h>
 #include <QProcess>
 
 namespace fs = std::filesystem;
@@ -101,9 +100,6 @@ std::string generate_random_string(size_t length);
 
 // Get version from codename using distro-info
 std::pair<int, bool> get_version_from_codename(const std::string& codename);
-
-// Git utilities
-void ensure_git_inited();
 
 void run_task_every(std::stop_token _stop_token, int interval_minutes, std::function<void()> task);
 

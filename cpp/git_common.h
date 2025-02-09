@@ -21,6 +21,7 @@
 
 namespace fs = std::filesystem;
 
+void ensure_git_inited();
 GitCommit get_commit_from_pkg_repo(const std::string& repo_name,
                                    std::shared_ptr<Log> log);
 void clone_or_fetch(const fs::path &repo_dir,

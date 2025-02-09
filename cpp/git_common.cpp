@@ -17,6 +17,13 @@
 
 #include <fstream>
 
+void ensure_git_inited() {
+    static std::once_flag git_init_flag;
+    std::call_once(git_init_flag, []() {
+        git_libgit2_init();
+    });
+}
+
 static int submodule_trampoline(git_submodule* sm, const char* name, void* payload) {
     // Cast payload back to the C++ lambda
     auto* callback = static_cast<std::function<int(git_submodule*, const char*, void*)>*>(payload);

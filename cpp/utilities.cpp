@@ -270,13 +270,6 @@ std::pair<int, bool> get_version_from_codename(const std::string& codename) {
     return {version, is_last};
 }
 
-void ensure_git_inited() {
-    static std::once_flag git_init_flag;
-    std::call_once(git_init_flag, []() {
-        git_libgit2_init();
-    });
-}
-
 void run_task_every(std::stop_token _stop_token, int interval_minutes, std::function<void()> task) {
     if (interval_minutes < 2) interval_minutes = 2;
     std::this_thread::sleep_for(std::chrono::minutes(interval_minutes / 2));
