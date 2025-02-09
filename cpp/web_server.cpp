@@ -225,6 +225,7 @@ bool WebServer::start_server(quint16 port) {
                     bool found_in_ppa = false;
                     for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
                         found_in_ppa = true;
+                        log->append(std::format("{}/{} found", pkgconf->package->name, package_version));
                         break;
                     }
                     if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
