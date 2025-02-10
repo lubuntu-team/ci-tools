@@ -651,12 +651,11 @@ std::vector<std::shared_ptr<PackageConf>> PackageConf::get_package_confs_by_pack
 }
 
 int PackageConf::successful_task_count() {
-    std::lock_guard<std::mutex> lock(*task_mutex_);
-
     int successful_count = 0;
-    for (const auto& [job_status, task] : jobstatus_task_map_) {
-        if (task && task->successful && task->finish_time > 0) {
-            ++successful_count;
+    {
+        std::lock_guard<std::mutex> lock(*task_mutex_);
+        for (const auto& [job_status, task] : jobstatus_task_map_) {
+            if (task && task->successful && task->finish_time > 0) ++successful_count;
         }
     }
     return successful_count;
@@ -667,9 +666,7 @@ int PackageConf::successful_or_pending_task_count() {
     {
         std::lock_guard<std::mutex> lock(*task_mutex_);
         for (const auto& [job_status, task] : jobstatus_task_map_) {
-            if (task && task->start_time > 0 && task->finish_time == 0) {
-                ++pending_count;
-            }
+            if (task && task->start_time > 0 && task->finish_time == 0) ++pending_count;
         }
     }
     return successful_task_count() + pending_count;
@@ -680,9 +677,7 @@ int PackageConf::successful_or_queued_task_count() {
     {
         std::lock_guard<std::mutex> lock(*task_mutex_);
         for (const auto& [job_status, task] : jobstatus_task_map_) {
-            if (task && task->queue_time > 0 && task->start_time == 0 && task->finish_time == 0) {
-                ++queued_count;
-            }
+            if (task && task->queue_time > 0 && task->start_time == 0 && task->finish_time == 0) ++queued_count;
         }
     }
     return successful_task_count() + queued_count;
