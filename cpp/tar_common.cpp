@@ -93,12 +93,12 @@ void create_tarball(const std::string &tarball_path,
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
-                std::time_t now_time = std::time(nullptr);
                 archive_entry_set_mtime(entry, file_stat.st_mtime, 0);
             } else {
                 if (log) log->append("Failed to stat: " + top_dir);
                 std::time_t now_time = std::time(nullptr);
                 archive_entry_set_mtime(entry, now_time, 0);
+                archive_entry_set_perm(entry, 0755);
             }
 
             archive_entry_set_pathname(entry, top_dir.c_str());
@@ -177,6 +177,10 @@ void create_tarball(const std::string &tarball_path,
                 archive_entry_set_uname(entry, clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "unknown").c_str());
                 archive_entry_set_gname(entry, clean_utf8(getgrgid(file_stat.st_gid) ? getgrgid(file_stat.st_gid)->gr_name : "unknown").c_str());
                 archive_entry_set_mtime(entry, file_stat.st_mtime, 0);
+            } else {
+                std::time_t now_time = std::time(nullptr);
+                archive_entry_set_mtime(entry, now_time, 0);
+                archive_entry_set_perm(entry, 0755);
             }
 
             // Write the entry to the archive
