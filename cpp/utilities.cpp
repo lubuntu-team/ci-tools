@@ -410,7 +410,7 @@ static const std::string clean_utf8(const char* name) {
         std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
         converter.from_bytes(name);
         return std::string(name);
-    } catch (const std::range_error&) return "unknown";
+    } catch (const std::range_error&) { return "unknown"; }
 }
 
 void create_tarball(const std::string &tarball_path,
