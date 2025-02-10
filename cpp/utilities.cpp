@@ -404,6 +404,15 @@ std::vector<std::string> extract_files_excluded(const std::string& filepath) {
     return files_excluded;
 }
 
+static const std::string clean_utf8(const char* name) {
+    if (!name) return "unknown";
+    try {
+        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+        converter.from_bytes(name);
+        return std::string(name);
+    } catch (const std::range_error&) return "unknown";
+}
+
 void create_tarball(const std::string &tarball_path,
                     const std::string &directory,
                     const std::vector<std::string> &exclusions,
@@ -448,16 +457,10 @@ void create_tarball(const std::string &tarball_path,
             std::string top_dir = base_dir_str + "/";
             struct stat file_stat;
             if (stat(top_dir.c_str(), &file_stat) == 0) {
-                if (struct passwd *pw = getpwuid(file_stat.st_uid)) {
-                    if (char *name = (char *)malloc(strlen(pw->pw_name) + 1)) {
-                        archive_entry_set_uname(entry, name);
-                    }
-                }
-                if (struct group *gr = getgrgid(file_stat.st_gid)) {
-                    if (char *name = (char *)malloc(strlen(gr->gr_name) + 1)) {
-                        archive_entry_set_gname(entry, name);
-                    }
-                }
+                std::string uname = clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "lugito");
+                std::string gname = clean_utf8(getgrgid(file_stat.st_gid) ? getgrgid(file_stat.st_gid)->gr_name : "lugito");
+                archive_entry_set_uname(entry, uname);
+                archive_entry_set_gname(entry, gname);
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
@@ -529,16 +532,10 @@ void create_tarball(const std::string &tarball_path,
 
             struct stat file_stat;
             if (stat(path.c_str(), &file_stat) == 0) {
-                if (struct passwd *pw = getpwuid(file_stat.st_uid)) {
-                    if (char *name = (char *)malloc(strlen(pw->pw_name) + 1)) {
-                        archive_entry_set_uname(entry, name);
-                    }
-                }
-                if (struct group *gr = getgrgid(file_stat.st_gid)) {
-                    if (char *name = (char *)malloc(strlen(gr->gr_name) + 1)) {
-                        archive_entry_set_gname(entry, name);
-                    }
-                }
+                std::string uname = clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "lugito");
+                std::string gname = clean_utf8(getgrgid(file_stat.st_gid) ? getgrgid(file_stat.st_gid)->gr_name : "lugito");
+                archive_entry_set_uname(entry, uname);
+                archive_entry_set_gname(entry, gname);
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
