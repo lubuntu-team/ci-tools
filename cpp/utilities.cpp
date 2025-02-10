@@ -13,22 +13,28 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <pwd.h>
+#include <grp.h>
+#include <unistd.h>
+#include <cstring>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <filesystem>
+#include <format>
+#include <regex>
+#include <sstream>
+#include <random>
+#include <ranges>
+#include <sys/stat.h>
+#include <unordered_set>
+
 #include "utilities.h"
 
 #include "/usr/include/archive.h"
 #include <archive_entry.h>
-#include <fstream>
-#include <iostream>
-#include <filesystem>
-#include <regex>
 #include <zlib.h>
 #include <curl/curl.h>
-#include <sys/stat.h>
-#include <sstream>
-#include <random>
-#include <ranges>
-#include <format>
-#include <unordered_set>
 
 bool verbose = false;
 
@@ -442,6 +448,16 @@ void create_tarball(const std::string &tarball_path,
             std::string top_dir = base_dir_str + "/";
             struct stat file_stat;
             if (stat(top_dir.c_str(), &file_stat) == 0) {
+                if (struct passwd *pw = getpwuid(file_stat.st_uid)) {
+                    if (char *name = (char *)malloc(strlen(pw->pw_name) + 1)) {
+                        archive_entry_set_uname(entry, name);
+                    }
+                }
+                if (struct group *gr = getgrgid(file_stat.st_gid)) {
+                    if (char *name = (char *)malloc(strlen(gr->gr_name) + 1)) {
+                        archive_entry_set_gname(entry, name);
+                    }
+                }
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
@@ -513,6 +529,16 @@ void create_tarball(const std::string &tarball_path,
 
             struct stat file_stat;
             if (stat(path.c_str(), &file_stat) == 0) {
+                if (struct passwd *pw = getpwuid(file_stat.st_uid)) {
+                    if (char *name = (char *)malloc(strlen(pw->pw_name) + 1)) {
+                        archive_entry_set_uname(entry, name);
+                    }
+                }
+                if (struct group *gr = getgrgid(file_stat.st_gid)) {
+                    if (char *name = (char *)malloc(strlen(gr->gr_name) + 1)) {
+                        archive_entry_set_gname(entry, name);
+                    }
+                }
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
