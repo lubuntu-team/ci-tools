@@ -85,7 +85,7 @@ void create_tarball(const std::string &tarball_path,
             if (!entry) throw std::runtime_error("Failed to create archive entry for top-level directory.");
             std::string top_dir = base_dir_str + "/";
             struct stat file_stat;
-            if (stat(top_dir.c_str(), &file_stat) == 0) {
+            if (stat(base_dir_str.c_str(), &file_stat) == 0) {
                 std::string uname = clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "lugito");
                 std::string gname = clean_utf8(getgrgid(file_stat.st_gid) ? getgrgid(file_stat.st_gid)->gr_name : "lugito");
                 archive_entry_set_uname(entry, uname.c_str());
