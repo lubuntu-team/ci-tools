@@ -441,17 +441,17 @@ void create_tarball(const std::string &tarball_path,
             if (!entry) throw std::runtime_error("Failed to create archive entry for top-level directory.");
             std::string top_dir = base_dir_str + "/";
             struct stat file_stat;
-            if (stat(top_dir.c_str(), &file_stat) != 0) {
+            if (stat(top_dir.c_str(), &file_stat) == 0) {
+                archive_entry_set_uid(entry, file_stat.st_uid);
+                archive_entry_set_gid(entry, file_stat.st_gid);
+                archive_entry_set_perm(entry, file_stat.st_mode);
+            } else {
                 if (log) log->append("Failed to stat: " + top_dir);
-                return;
             }
 
             archive_entry_set_pathname(entry, top_dir.c_str());
             archive_entry_set_size(entry, 0);
             archive_entry_set_filetype(entry, AE_IFDIR);
-            archive_entry_set_uid(entry, file_stat.st_uid);
-            archive_entry_set_gid(entry, file_stat.st_gid);
-            archive_entry_set_perm(entry, file_stat.st_mode);
             std::time_t now_time = std::time(nullptr);
             archive_entry_set_mtime(entry, now_time, 0);
             if (archive_write_header(a.get(), entry) != ARCHIVE_OK) {
@@ -503,11 +503,6 @@ void create_tarball(const std::string &tarball_path,
                 if (added_directories.find(canon_str) != added_directories.end()) continue;
                 added_directories.insert(canon_str);
             }
-            struct stat file_stat;
-            if (stat(path.c_str(), &file_stat) != 0) {
-                if (log) log->append("Failed to stat: " + path.string());
-                continue;
-            }
 
             // Create a new archive entry for this file/directory/symlink.
             struct archive_entry *entry = archive_entry_new();
@@ -516,15 +511,21 @@ void create_tarball(const std::string &tarball_path,
                 continue;
             }
 
+            struct stat file_stat;
+            if (stat(path.c_str(), &file_stat) == 0) {
+                archive_entry_set_uid(entry, file_stat.st_uid);
+                archive_entry_set_gid(entry, file_stat.st_gid);
+                archive_entry_set_perm(entry, file_stat.st_mode);
+                archive_entry_set_size(entry, fs::is_regular_file(path) ? file_stat.st_size : 0);
+            } else {
+                if (log) log->append("Failed to stat: " + path.string());
+            }
+
             // Make sure directories end with a '/'
             if (fs::is_directory(fstatus)) {
                 if (!entry_path_str.empty() && entry_path_str.back() != '/') entry_path_str.push_back('/');
             }
             archive_entry_set_pathname(entry, entry_path_str.c_str());
-            archive_entry_set_uid(entry, file_stat.st_uid);
-            archive_entry_set_gid(entry, file_stat.st_gid);
-            archive_entry_set_perm(entry, file_stat.st_mode);
-            archive_entry_set_size(entry, fs::is_regular_file(path) ? file_stat.st_size : 0);
 
             if (fs::is_regular_file(fstatus)) {
                 uintmax_t filesize = fs::file_size(path, ec);
