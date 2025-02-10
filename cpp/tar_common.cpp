@@ -118,8 +118,7 @@ void create_tarball(const std::string &tarball_path,
         std::unordered_set<std::string> added_directories;
 
         // Now iterate recursively through the source directory.
-        for (auto it = fs::recursive_directory_iterator(directory,
-                     fs::directory_options::skip_permission_denied | fs::directory_options::follow_directory_symlink);
+        for (auto it = fs::recursive_directory_iterator(directory, fs::directory_options::skip_permission_denied);
              it != fs::recursive_directory_iterator(); ++it) {
 
             const auto& path = it->path();
@@ -166,6 +165,8 @@ void create_tarball(const std::string &tarball_path,
                 const auto target = fs::read_symlink(path, ec);
                 if (!ec) archive_entry_set_symlink(entry, target.c_str());
                 archive_entry_set_filetype(entry, AE_IFLNK);
+                archive_entry_set_size(entry, 0);
+                archive_entry_set_perm(entry, 0777);
             }
 
             // Set permissions and ownership
