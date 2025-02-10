@@ -13,11 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "task_queue.h"
 #include "ci_logic.h"
-#include "utilities.h"
 #include "db_common.h"
 #include "git_common.h"
+#include "tar_common.h"
+#include "task_queue.h"
+#include "utilities.h"
 
 #include <yaml-cpp/yaml.h>
 #include <filesystem>

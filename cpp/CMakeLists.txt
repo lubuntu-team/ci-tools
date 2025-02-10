@@ -43,6 +43,7 @@ add_library(lubuntuci_lib SHARED
     utilities.cpp
     db_common.cpp
     git_common.cpp
+    tar_common.cpp
     sources_parser.cpp
     ci_logic.cpp
     ci_database_objs.cpp

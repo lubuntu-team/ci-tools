@@ -118,9 +118,3 @@ bool run_command(const std::vector<std::string> &cmd,
 
 // Function to extract excluded files from a copyright file
 std::vector<std::string> extract_files_excluded(const std::string& filepath);
-
-// Function to create a tarball
-void create_tarball(const std::string& tarballPath,
-                    const std::string& directory,
-                    const std::vector<std::string>& exclusions,
-                    std::shared_ptr<Log> log = nullptr);
