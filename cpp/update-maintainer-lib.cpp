@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include "fs_common.h"
 #include "update-maintainer-lib.h"
 #include <filesystem>
 #include <fstream>
@@ -54,20 +55,6 @@ static bool xsbc_managed_by_rules(const fs::path &debian_dir) {
         }
     }
     return false;
-}
-
-static std::string read_file(const fs::path &p) {
-    std::ifstream f(p);
-    if(!f) throw std::runtime_error("Cannot read file: " + p.string());
-    std::stringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
-}
-
-static void write_file(const fs::path &p, const std::string &content) {
-    std::ofstream f(p);
-    if(!f) throw std::runtime_error("Cannot write file: " + p.string());
-    f << content;
 }
 
 static void update_maintainer_file(const fs::path &control_file, bool verbose) {

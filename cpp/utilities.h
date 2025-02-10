@@ -15,14 +15,15 @@
 
 #pragma once
 
-#include <string>
 #include <filesystem>
+#include <functional>
+#include <future>
 #include <mutex>
 #include <regex>
-#include <future>
 #include <shared_mutex>
 #include <semaphore>
-#include <functional>
+#include <string>
+
 #include <QProcess>
 
 namespace fs = std::filesystem;
@@ -68,15 +69,6 @@ public:
     }
 };
 
-// Function to read the entire content of a file into a string
-std::string read_file(const std::filesystem::path& filePath);
-
-// Function to write a string into a file
-void write_file(const std::filesystem::path& filePath, const std::string& content);
-
-// Function to perform in-place regex replace on a file
-void regex_replace_in_file(const std::filesystem::path& filePath, const std::string& pattern, const std::string& replace);
-
 // Function to decompress gzipped files
 std::string decompress_gzip(const std::filesystem::path& filePath);
 
@@ -86,12 +78,6 @@ void download_file_with_timestamping(const std::string& url, const std::filesyst
 
 // Helper function for libcurl write callback
 size_t write_data(void* ptr, size_t size, size_t nmemb, void* stream);
-
-// Function to create a temporary directory with a random name
-std::filesystem::path create_temp_directory();
-
-// Function to copy a directory recursively
-void copy_directory(const std::filesystem::path& source, const std::filesystem::path& destination);
 
 // String utilities
 std::vector<std::string> split_string(const std::string& input, const std::string& delimiter);
@@ -115,6 +101,3 @@ bool run_command(const std::vector<std::string> &cmd,
                  const std::optional<fs::path> &cwd = std::nullopt,
                  bool show_output = false,
                  std::shared_ptr<Log> log = nullptr);
-
-// Function to extract excluded files from a copyright file
-std::vector<std::string> extract_files_excluded(const std::string& filepath);

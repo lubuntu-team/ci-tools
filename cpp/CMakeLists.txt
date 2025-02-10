@@ -42,6 +42,7 @@ set(UUID_LIB "uuid")
 add_library(lubuntuci_lib SHARED
     utilities.cpp
     db_common.cpp
+    fs_common.cpp
     git_common.cpp
     tar_common.cpp
     sources_parser.cpp

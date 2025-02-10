@@ -16,6 +16,7 @@
 #include "ci_logic.h"
 #include "db_common.h"
 #include "git_common.h"
+#include "fs_common.h"
 #include "tar_common.h"
 #include "task_queue.h"
 #include "utilities.h"
