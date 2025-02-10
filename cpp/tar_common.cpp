@@ -80,10 +80,10 @@ void create_tarball(const std::string &tarball_path,
         std::string base_dir_str = base_dir.string();
 
         // First add an entry for the top-level directory (with a trailing slash)
+        std::string top_dir = base_dir_str + "/";
         {
             struct archive_entry *entry = archive_entry_new();
             if (!entry) throw std::runtime_error("Failed to create archive entry for top-level directory.");
-            std::string top_dir = base_dir_str + "/";
             struct stat file_stat;
             if (stat(base_dir_str.c_str(), &file_stat) == 0) {
                 std::string uname = clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "lugito");
@@ -93,15 +93,17 @@ void create_tarball(const std::string &tarball_path,
                 archive_entry_set_uid(entry, file_stat.st_uid);
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_perm(entry, file_stat.st_mode);
+                std::time_t now_time = std::time(nullptr);
+                archive_entry_set_mtime(entry, file_stat.st_mtime, 0);
             } else {
                 if (log) log->append("Failed to stat: " + top_dir);
+                std::time_t now_time = std::time(nullptr);
+                archive_entry_set_mtime(entry, now_time, 0);
             }
 
             archive_entry_set_pathname(entry, top_dir.c_str());
             archive_entry_set_size(entry, 0);
             archive_entry_set_filetype(entry, AE_IFDIR);
-            std::time_t now_time = std::time(nullptr);
-            archive_entry_set_mtime(entry, now_time, 0);
             if (archive_write_header(a.get(), entry) != ARCHIVE_OK) {
                 std::string err = "Failed to write header for top-level directory: ";
                 err += archive_error_string(a.get());
@@ -137,7 +139,7 @@ void create_tarball(const std::string &tarball_path,
             }
 
             // Ensure we skip any duplicate by checking conflicts between files and directories
-            if ((fs::is_directory(fstatus) && fs::exists(path)) || 
+            if ((fs::is_directory(fstatus) && fs::exists(path)) ||
                 (fs::is_regular_file(fstatus) && fs::is_directory(path))) {
                 continue;  // Conflict detected, skip it
             }
@@ -174,6 +176,7 @@ void create_tarball(const std::string &tarball_path,
                 archive_entry_set_gid(entry, file_stat.st_gid);
                 archive_entry_set_uname(entry, clean_utf8(getpwuid(file_stat.st_uid) ? getpwuid(file_stat.st_uid)->pw_name : "unknown").c_str());
                 archive_entry_set_gname(entry, clean_utf8(getgrgid(file_stat.st_gid) ? getgrgid(file_stat.st_gid)->gr_name : "unknown").c_str());
+                archive_entry_set_mtime(entry, file_stat.st_mtime, 0);
             }
 
             // Write the entry to the archive
