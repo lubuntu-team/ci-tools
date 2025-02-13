@@ -1427,6 +1427,12 @@ packages:
     packaging_url: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/yakuake"
     packaging_browser: "https://git.launchpad.net/~kubuntu-packagers/kubuntu-packaging/+git/yakuake/commit/?id="
     packaging_branch: "kubuntu_unstable"
+  - name: qcoro
+    upstream_url: "https://github.com/qcoro/qcoro.git"
+    upstream_browser: "https://github.com/qcoro/qcoro/commit/"
+    packaging_url: "https://salsa.debian.org/qt-kde-team/extras/qcoro.git"
+    packaging_browser: "https://salsa.debian.org/qt-kde-team/extras/qcoro/-/commit/"
+    packaging_branch: "master"
 
 releases:
   - plucky
