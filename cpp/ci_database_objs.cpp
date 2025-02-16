@@ -40,7 +40,7 @@ Release::Release(int id, int version, const std::string& codename, bool isDefaul
 
 std::vector<Release> Release::get_releases() {
     std::vector<Release> result;
-    QString query_str = "SELECT id, version, codename, isDefault FROM release;";
+    QString query_str = "SELECT id, version, codename, isDefault FROM release WHERE codename != 'warty';";
     QSqlQuery query(query_str, get_thread_connection());
     while (query.next()) {
         result.emplace_back(Release(query.value("id").toInt(),
@@ -1247,6 +1247,7 @@ void Task::save(int _packageconf_id) {
     if (_packageconf_id == 0 || _packageconf_id == 32767) {
         auto pkgconf = get_parent_packageconf();
         packageconf_id = pkgconf ? pkgconf->id : 0;
+        packageconf_id = (packageconf_id == 0) ? 1 : packageconf_id;
     } else {
         packageconf_id = _packageconf_id;
     }
@@ -1258,7 +1259,7 @@ void Task::save(int _packageconf_id) {
         WHERE packageconf_id = :packageconf_id AND jobstatus_id = :jobstatus_id
     )");
     link_query.bindValue(":task_id", id);
-    link_query.bindValue(":packageconf_id", (packageconf_id == 0) ? QVariant(QMetaType::fromType<int>()) : packageconf_id);
+    link_query.bindValue(":packageconf_id", packageconf_id);
     link_query.bindValue(":jobstatus_id", jobstatus->id);
 
     if (!ci_query_exec(&link_query)) {
@@ -1272,7 +1273,7 @@ void Task::save(int _packageconf_id) {
             INSERT INTO packageconf_jobstatus_id (packageconf_id, jobstatus_id, task_id)
             VALUES (:packageconf_id, :jobstatus_id, :task_id)
         )");
-        link_query.bindValue(":packageconf_id", (packageconf_id == 0) ? QVariant(QMetaType::fromType<int>()) : packageconf_id);
+        link_query.bindValue(":packageconf_id", packageconf_id);
         link_query.bindValue(":jobstatus_id", jobstatus->id);
         link_query.bindValue(":task_id", id);
 

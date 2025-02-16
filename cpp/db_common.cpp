@@ -147,12 +147,20 @@ bool init_database(const QString& database_path) {
             packaging_url TEXT NOT NULL
         );
 
+        INSERT INTO package (id, name, large, upstream_url, packaging_branch, packaging_url)
+            SELECT 1, 'system', 0, '.', '.', '.'
+            WHERE NOT EXISTS (SELECT 1 FROM package WHERE id=1);
+
         CREATE TABLE IF NOT EXISTS release (
             id INTEGER PRIMARY KEY,
             version INTEGER NOT NULL UNIQUE,
             codename TEXT NOT NULL UNIQUE,
             isDefault INTEGER NOT NULL DEFAULT 0
         );
+
+        INSERT INTO release (id, version, codename, isDefault)
+            SELECT 1, 410, 'warty', 0
+            WHERE NOT EXISTS (SELECT 1 FROM release WHERE id=1);
 
         CREATE TABLE IF NOT EXISTS branch (
             id INTEGER PRIMARY KEY,
@@ -175,6 +183,10 @@ bool init_database(const QString& database_path) {
             commit_committer TEXT NOT NULL
         );
 
+        INSERT INTO git_commit (id, commit_hash, commit_summary, commit_message, commit_datetime, commit_author, commit_committer)
+            SELECT 1, '.', '.', '.', '2024-01-01T00:00:00', '', ''
+            WHERE NOT EXISTS (SELECT 1 FROM branch WHERE id=1);
+
         CREATE TABLE IF NOT EXISTS packageconf (
             id INTEGER PRIMARY KEY,
             upstream_version TEXT,
@@ -190,6 +202,10 @@ bool init_database(const QString& database_path) {
             FOREIGN KEY (packaging_commit_id) REFERENCES git_commit(id) ON DELETE CASCADE,
             FOREIGN KEY (upstream_commit_id) REFERENCES git_commit(id) ON DELETE CASCADE
         );
+
+        INSERT INTO packageconf (id, upstream_version, ppa_revision, package_id, release_id, branch_id, packaging_commit_id, upstream_commit_id)
+            SELECT 1, '', 0, 1, 1, 1, 1, 1
+            WHERE NOT EXISTS (SELECT 1 FROM branch WHERE id=1);
 
         CREATE TABLE IF NOT EXISTS jobstatus (
             id INTEGER PRIMARY KEY,
@@ -212,7 +228,7 @@ bool init_database(const QString& database_path) {
 
         CREATE TABLE IF NOT EXISTS task (
             id INTEGER PRIMARY KEY,
-            packageconf_id INTEGER DEFAULT NULL,
+            packageconf_id INTEGER NOT NULL,
             jobstatus_id INTEGER NOT NULL,
             queue_time INTEGER DEFAULT 0,
             start_time INTEGER DEFAULT 0,
