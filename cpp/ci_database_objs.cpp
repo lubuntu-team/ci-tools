@@ -1126,8 +1126,8 @@ Task::Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_
     QSqlQuery insert_query(get_thread_connection());
     if (packageconf) {
         insert_query.prepare("INSERT INTO task (packageconf_id, jobstatus_id, queue_time) VALUES (?, ?, ?)");
-        insert_query.addBindValue(packageconf->id);
-    } else insert_query.prepare("INSERT INTO task (jobstatus_id, queue_time) VALUES (?, ?)");
+        insert_query.addBindValue((packageconf->id == 0) ? 1 : packageconf->id);
+    } else insert_query.prepare("INSERT INTO task (packageconf_id, jobstatus_id, queue_time) VALUES (1, ?, ?)");
 
     insert_query.addBindValue(jobstatus->id);
     insert_query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(time)));
@@ -1135,7 +1135,6 @@ Task::Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_
     build_score = jobstatus->build_score;
 
     if (!ci_query_exec(&insert_query)) {
-        // Log error with relevant details
         log_error("Failed to insert Task: " + insert_query.lastError().text().toStdString());
         return;
     }
