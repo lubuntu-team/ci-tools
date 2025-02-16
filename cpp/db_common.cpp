@@ -200,6 +200,7 @@ bool init_database(const QString& database_path) {
 
         INSERT OR IGNORE INTO jobstatus (build_score, name, display_name)
             VALUES
+                (250, 'system', 'System Task'),
                 (80, 'pull', 'Pull'),
                 (70, 'tarball', 'Create Tarball'),
                 (60, 'source_build', 'Source Build'),
@@ -211,7 +212,7 @@ bool init_database(const QString& database_path) {
 
         CREATE TABLE IF NOT EXISTS task (
             id INTEGER PRIMARY KEY,
-            packageconf_id INTEGER NOT NULL,
+            packageconf_id INTEGER DEFAULT NULL,
             jobstatus_id INTEGER NOT NULL,
             queue_time INTEGER DEFAULT 0,
             start_time INTEGER DEFAULT 0,

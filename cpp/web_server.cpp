@@ -216,58 +216,74 @@ bool WebServer::start_server(quint16 port) {
     });
 
     process_sources_thread_ = std::jthread(run_task_every, 10, [this, all_repos, proposed, cilogic, job_statuses] {
-        for (auto pkgconf : all_repos) {
-            if (!pkgconf->can_check_source_upload()) continue;
-            task_queue->enqueue(
-                job_statuses->at("source_check"),
-                [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
+        std::shared_ptr<PackageConf> null_pkgconf;
+        task_queue->enqueue(
+            job_statuses->at("system"),
+            [this, all_repos, proposed, job_statuses](std::shared_ptr<Log> log) mutable {
+                for (auto pkgconf : all_repos) {
+                    if (!pkgconf->can_check_source_upload()) continue;
                     std::string package_version = pkgconf->upstream_version + "-0ubuntu0~ppa" + std::to_string(pkgconf->ppa_revision);
-                    bool found_in_ppa = false;
-                    for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
-                        found_in_ppa = true;
-                        log->append(std::format("{}/{} found", pkgconf->package->name, package_version));
-                        break;
-                    }
-                    if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
-                },
-                pkgconf
-            );
-            pkgconf->sync();
-        }
+                    log->append(std::format("Enqueueing build check for {}/{}", pkgconf->package->name, package_version));
+                    task_queue->enqueue(
+                        job_statuses->at("source_check"),
+                        [this, package_version, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
+                            pkgconf->sync();
+                            bool found_in_ppa = false;
+                            for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
+                                found_in_ppa = true;
+                                log->append(std::format("{}/{} found", pkgconf->package->name, package_version));
+                                break;
+                            }
+                            if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
+                        },
+                        pkgconf
+                    );
+                }
+            },
+            null_pkgconf
+        );
     });
 
     process_binaries_thread_ = std::jthread(run_task_every, 15, [this, all_repos, proposed, cilogic, job_statuses] {
-        for (auto pkgconf : all_repos) {
-            if (!pkgconf->can_check_builds()) continue;
-            task_queue->enqueue(
-                job_statuses->at("build_check"),
-                [this, pkgconf, proposed](std::shared_ptr<Log> log) mutable {
+        std::shared_ptr<PackageConf> null_pkgconf;
+        task_queue->enqueue(
+            job_statuses->at("system"),
+            [this, all_repos, job_statuses, proposed](std::shared_ptr<Log> log) mutable {
+                for (auto pkgconf : all_repos) {
+                    if (!pkgconf->can_check_builds()) continue;
                     std::string package_version = pkgconf->upstream_version + "-0ubuntu0~ppa" + std::to_string(pkgconf->ppa_revision);
-                    bool found_in_ppa = false;
-                    source_package_publishing_history target_spph;
-                    for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
-                        found_in_ppa = true;
-                        target_spph = spph;
-                        break;
-                    }
+                    log->append(std::format("Enqueueing build check for {}/{}", pkgconf->package->name, package_version));
+                    task_queue->enqueue(
+                        job_statuses->at("build_check"),
+                        [this, proposed, pkgconf, package_version](std::shared_ptr<Log> log) mutable {
+                            pkgconf->sync();
+                            bool found_in_ppa = false;
+                            source_package_publishing_history target_spph;
+                            for (auto spph : proposed.getPublishedSources("", "", std::nullopt, true, true, "", pkgconf->package->name, "", package_version)) {
+                                found_in_ppa = true;
+                                target_spph = spph;
+                                break;
+                            }
 
-                    if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
+                            if (!found_in_ppa) throw std::runtime_error("Not found in the PPA.");
 
-                    bool all_builds_passed = true;
-                    for (auto build : target_spph.getBuilds()) {
-                        if (build.buildstate != "Successfully built") all_builds_passed = false;
-                        log->append(std::format("Build of {} {} in {} for {} has a status of {}",
-                                                pkgconf->package->name, package_version, pkgconf->release->codename,
-                                                build.arch_tag, build.buildstate));
-                    }
+                            bool all_builds_passed = true;
+                            for (auto build : target_spph.getBuilds()) {
+                                if (build.buildstate != "Successfully built") all_builds_passed = false;
+                                log->append(std::format("Build of {} {} in {} for {} has a status of {}",
+                                                        pkgconf->package->name, package_version, pkgconf->release->codename,
+                                                        build.arch_tag, build.buildstate));
+                            }
 
-                    if (!all_builds_passed) throw std::runtime_error("Build(s) pending or failed, job is not successful.");
-                },
-                pkgconf
-            );
+                            if (!all_builds_passed) throw std::runtime_error("Build(s) pending or failed, job is not successful.");
 
-            pkgconf->sync();
-        }
+                        },
+                        pkgconf
+                    );
+                }
+            },
+            null_pkgconf
+        );
     });
 
     ////////////////////////////////////////////////////////////////

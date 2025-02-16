@@ -38,7 +38,8 @@ void TaskQueue::enqueue(std::shared_ptr<JobStatus> jobstatus,
             if (auto task_locked = self_weak.lock())
                 task_func(log);
         };
-        packageconf->assign_task(jobstatus, task_ptr, packageconf);
+        if (jobstatus->name != "system") packageconf->assign_task(jobstatus, task_ptr, packageconf);
+
         std::unique_lock<std::mutex> lock(tasks_mutex_);
         tasks_.emplace(task_ptr);
     }
@@ -85,6 +86,11 @@ void TaskQueue::worker_thread() {
             if (stop_ && tasks_.empty()) return;
             auto it = tasks_.begin();
             while (it != tasks_.end()) {
+                if (!(*it)->get_parent_packageconf()) {
+                    task_to_execute = *it;
+                    tasks_.erase(it);
+                    break;
+                }
                 int package_id = (*it)->get_parent_packageconf()->package->id;
                 {
                     std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
@@ -101,7 +107,7 @@ void TaskQueue::worker_thread() {
             }
         }
         if (!task_to_execute || !task_to_execute->func) continue;
-        {
+        else if (task_to_execute->get_parent_packageconf()) {
             std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
             running_packages_.insert(task_to_execute->get_parent_packageconf()->package);
         }
@@ -137,7 +143,7 @@ void TaskQueue::worker_thread() {
                 running_tasks_.erase(it);
             }
         }
-        {
+        if (task_to_execute->get_parent_packageconf()) {
             std::lock_guard<std::mutex> pkg_lock(running_packages_mutex_);
             int package_id = task_to_execute->get_parent_packageconf()->package->id;
             auto it = std::find_if(running_packages_.begin(), running_packages_.end(),

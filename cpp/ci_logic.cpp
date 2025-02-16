@@ -760,14 +760,15 @@ std::shared_ptr<std::map<std::string, std::shared_ptr<JobStatus>>> CiLogic::get_
 
     static const auto statuses = std::make_shared<std::map<std::string, std::shared_ptr<JobStatus>>>(
         std::map<std::string, std::shared_ptr<JobStatus>>{
-            {"pull", std::make_shared<JobStatus>(JobStatus(1))},
-            {"tarball", std::make_shared<JobStatus>(JobStatus(2))},
-            {"source_build", std::make_shared<JobStatus>(JobStatus(3))},
-            {"upload", std::make_shared<JobStatus>(JobStatus(4))},
-            {"source_check", std::make_shared<JobStatus>(JobStatus(5))},
-            {"build_check", std::make_shared<JobStatus>(JobStatus(6))},
-            {"lintian", std::make_shared<JobStatus>(JobStatus(7))},
-            {"britney", std::make_shared<JobStatus>(JobStatus(8))}
+            {"system", std::make_shared<JobStatus>(JobStatus(1))},
+            {"pull", std::make_shared<JobStatus>(JobStatus(2))},
+            {"tarball", std::make_shared<JobStatus>(JobStatus(3))},
+            {"source_build", std::make_shared<JobStatus>(JobStatus(4))},
+            {"upload", std::make_shared<JobStatus>(JobStatus(5))},
+            {"source_check", std::make_shared<JobStatus>(JobStatus(6))},
+            {"build_check", std::make_shared<JobStatus>(JobStatus(7))},
+            {"lintian", std::make_shared<JobStatus>(JobStatus(8))},
+            {"britney", std::make_shared<JobStatus>(JobStatus(9))}
         }
     );
 

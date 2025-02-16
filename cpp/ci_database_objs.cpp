@@ -1124,8 +1124,11 @@ Task::Task(std::shared_ptr<JobStatus> jobstatus, std::int64_t time, std::shared_
     std::lock_guard<std::mutex> sync_lock(*sync_mutex_);
     assert(log != nullptr && "Log pointer should never be null");
     QSqlQuery insert_query(get_thread_connection());
-    insert_query.prepare("INSERT INTO task (packageconf_id, jobstatus_id, queue_time) VALUES (?, ?, ?)");
-    insert_query.addBindValue(packageconf->id);
+    if (packageconf) {
+        insert_query.prepare("INSERT INTO task (packageconf_id, jobstatus_id, queue_time) VALUES (?, ?, ?)");
+        insert_query.addBindValue(packageconf->id);
+    } else insert_query.prepare("INSERT INTO task (jobstatus_id, queue_time) VALUES (?, ?)");
+
     insert_query.addBindValue(jobstatus->id);
     insert_query.addBindValue(QVariant::fromValue(static_cast<qlonglong>(time)));
 
@@ -1255,7 +1258,7 @@ void Task::save(int _packageconf_id) {
         WHERE packageconf_id = :packageconf_id AND jobstatus_id = :jobstatus_id
     )");
     link_query.bindValue(":task_id", id);
-    link_query.bindValue(":packageconf_id", packageconf_id);
+    link_query.bindValue(":packageconf_id", (packageconf_id == 0) ? QVariant(QMetaType::fromType<int>()) : packageconf_id);
     link_query.bindValue(":jobstatus_id", jobstatus->id);
 
     if (!ci_query_exec(&link_query)) {
@@ -1269,7 +1272,7 @@ void Task::save(int _packageconf_id) {
             INSERT INTO packageconf_jobstatus_id (packageconf_id, jobstatus_id, task_id)
             VALUES (:packageconf_id, :jobstatus_id, :task_id)
         )");
-        link_query.bindValue(":packageconf_id", packageconf_id);
+        link_query.bindValue(":packageconf_id", (packageconf_id == 0) ? QVariant(QMetaType::fromType<int>()) : packageconf_id);
         link_query.bindValue(":jobstatus_id", jobstatus->id);
         link_query.bindValue(":task_id", id);
 
